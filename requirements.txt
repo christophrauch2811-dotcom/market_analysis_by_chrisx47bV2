@@ -1,0 +1,6 @@
+mcp
+ta
+requests
+pandas
+tradingview-ta
+MetaTrader5; platform_system == "Windows"

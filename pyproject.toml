@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading-mcp-connector"
+version = "0.1.0"
+description = "MCP-Connector für Claude Code: Marktdaten, 210 RL-Features, Regime-/Trenderkennung aus Crypto.com, TradingView und MetaTrader5"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "mcp>=1.0.0",
+    "ta>=0.11.0",
+    "requests>=2.31.0",
+    "pandas>=2.0.0",
+    "tradingview-ta>=3.3.0",
+]
+
+[project.optional-dependencies]
+mt5 = ["MetaTrader5>=5.0.45; platform_system=='Windows'"]
+
+[project.scripts]
+trading-connector = "trading_mcp_connector.server:main"
+
+[tool.setuptools.packages.find]
+include = ["trading_mcp_connector*"]

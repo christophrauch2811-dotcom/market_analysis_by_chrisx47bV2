@@ -26,7 +26,10 @@ Paketname: `market_analysis_by_chrisx47b` (Repo/PyPI-Name mit Bindestrichen:
   über alle Quellen. Neue Quelle = hier einen Eintrag ergänzen, nicht jedes
   Tool einzeln anfassen.
 - `sources/` -- `crypto_com.py`, `binance.py`, `bybit.py`, `mt5_source.py`,
-  `tradingview.py`. Jede mit `@ttl_cache` (aus `cache.py`) und Rate-Limiter.
+  `tradingview.py`, `kucoin.py`, `kraken.py`, `bitfinex.py`, `coingecko.py`,
+  `yahoo.py`. Jede mit `@ttl_cache` (aus `cache.py`) und Rate-Limiter.
+  **9 Quellen insgesamt** -- alle ueber `source_router.py`, KEINE eigenen
+  Tools pro Quelle (Tool-Anzahl bleibt bei 26).
 - `rl_features.py` -- 249 Raw- / 183 Modell-Features (skaleninvariant) für
   RL-Trainingsdaten. `build_model_feature_vector()` ist der Standard-Pfad;
   `ABSOLUTE_PRICE_KEYS` listet alles, was NICHT ins Modell-Set darf (absolute
@@ -90,6 +93,13 @@ Fixes unten).
    Windows-Marker (`MetaTrader5>=5.0.45; platform_system=='Windows'`) --
    `pip install -e .` installiert es auf Windows automatisch, auf Linux/Mac
    wird es automatisch uebersprungen (kein Fehler).
+7. **KuCoin/Bitfinex Kline-Spaltenreihenfolge**: beide liefern `close` VOR
+   `high`/`low` in der Antwort (nicht die uebliche open/high/low/close-
+   Reihenfolge) -- beim Hinzufuegen neuer Endpunkte dieser beiden Quellen
+   immer die tatsaechliche Spaltenreihenfolge aus der Doku pruefen, nicht annehmen.
+8. **Kraken-Antwort-Key weicht vom angefragten Symbol ab** (z.B. angefragt
+   `XBTUSD`, Antwort-Key `XXBTZUSD`) -- `_first_pair_key()` in `kraken.py`
+   nimmt deshalb den ersten Key ungleich `last`, nie den angefragten Namen direkt.
 
 ## Kosten/Token-Konventionen (wichtig für neue Tools)
 

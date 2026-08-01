@@ -54,9 +54,9 @@ Danach stehen die Tools in jeder Claude-Code-Session zur Verfuegung, z.B.:
 
 | Tool | Quelle | Beschreibung |
 |---|---|---|
-| `candles` | crypto/binance/bybit/mt5 | OHLCV-Kerzen (ein Tool statt vier) |
-| `ticker` | crypto/binance/bybit | Aktueller Preis/24h-Change/Volumen |
-| `order_book` | crypto/binance/bybit | Orderbuch (Bids/Asks) |
+| `candles` | crypto/binance/bybit/mt5/kucoin/kraken/bitfinex/coingecko/yahoo | OHLCV-Kerzen (ein Tool statt neun) |
+| `ticker` | crypto/binance/bybit/kucoin/kraken/bitfinex/coingecko/yahoo | Aktueller Preis/24h-Change/Volumen |
+| `order_book` | crypto/binance/bybit/kraken/bitfinex | Orderbuch (Bids/Asks) |
 | `tradingview_summary` | TradingView | Buy/Sell/Neutral-Rating je Indikator |
 | `create_pinescript_indicator` | – | Generiert Pine-Script-v6-Indikator-Code, speichert optional als `.txt` |
 | `create_pinescript_strategy` | – | Generiert Pine-Script-v6-Strategie-Code, lauffähig in TradingViews Strategy Tester |
@@ -110,6 +110,31 @@ Tool-Antworten, nicht wie schnell die Daten geholt wurden.
 Preis, ein einzelner Indikator) `ticker`/`extended_indicators` mit `fields`
 nutzen statt `rl_feature_vector` ohne Filter -- der volle 183-Feature-Vektor
 ist für ML-Trainingsdaten gedacht, nicht für "was ist der RSI gerade".
+
+### 5 weitere Datenquellen: KuCoin, Kraken, Bitfinex, CoinGecko, Yahoo Finance
+
+Wie Binance/Bybit einfach als weitere `source`-Werte in `candles`/`ticker`/
+`order_book`/`market_regime`/`extended_indicators`/`rl_feature_vector` etc.
+nutzbar -- **keine neuen Tools**, um den Tool-Schema-Overhead nicht wieder
+zu erhöhen.
+
+**Symbol-Format ist je Quelle unterschiedlich** (kein einheitliches Format
+über alle 9 Quellen hinweg möglich):
+
+| Quelle | Symbol-Beispiel | Besonderheit |
+|---|---|---|
+| `kucoin` | `BTC-USDT` (mit Bindestrich) | Kline-Antwort hat unübliche Spaltenreihenfolge (close vor high/low) -- verifiziert und korrekt gemappt |
+| `kraken` | `XBTUSD` (XBT statt BTC) | Antwort-Key kann vom angefragten Symbol abweichen (`XBTUSD` → `XXBTZUSD`) -- Code nimmt automatisch den ersten Nicht-`last`-Key |
+| `bitfinex` | `tBTCUSD` (t-Präfix, wird automatisch ergänzt falls fehlt) | Candles-Antwort hat unübliche Spaltenreihenfolge (close vor high/low) |
+| `coingecko` | `bitcoin` (**Coin-ID, kein Trading-Pair!**) | Kein Ticker im klassischen Sinn -- `timeframe` wird nur grob auf `days` übersetzt, CoinGecko bestimmt die Granularität automatisch. **Braucht inzwischen einen kostenlosen Demo-API-Key** (Umgebungsvariable `COINGECKO_API_KEY`, optional -- ohne Key stärker rate-limitiert) |
+| `yahoo` | `AAPL`, `EURUSD=X`, `BTC-USD`, `^GSPC` | **Inoffiziell** (Yahoos offizielle API wurde 2017 eingestellt) -- deckt dafür Aktien/ETFs/Indizes/Forex ab, nicht nur Krypto. Kein Orderbuch, kein natives 4h-Intervall |
+
+`order_book` ist für `kucoin`/`coingecko`/`yahoo` nicht angebunden (kein
+öffentliches L2-Orderbuch bzw. kein Konzept dafür).
+
+Alle 5 gegen die echte API-Dokumentation verifiziert, mit gemockten,
+formatgetreuen Antworten getestet (kein Live-Zugriff aus dieser Sandbox
+möglich) -- Live-Verifikation mit echten Daten steht bei dir noch aus.
 
 ### Binance & Bybit
 

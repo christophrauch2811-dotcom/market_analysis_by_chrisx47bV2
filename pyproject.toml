@@ -9,6 +9,18 @@ description = "MCP-Connector für Claude Code: Marktdaten, Regime-/Trend-/Chartm
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+keywords = ["mcp", "trading", "crypto", "technical-analysis", "claude", "claude-code"]
+authors = [{name = "chrisx47b"}]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
 dependencies = [
     "mcp>=1.0.0,<2",
     "ta>=0.11.0",
@@ -17,6 +29,10 @@ dependencies = [
     "tradingview-ta>=3.3.0",
     "MetaTrader5>=5.0.45; platform_system=='Windows'",
 ]
+
+[project.urls]
+Repository = "https://github.com/christophrauch2811-dotcom/market-analysis-by-chrisx47b"
+Issues = "https://github.com/christophrauch2811-dotcom/market-analysis-by-chrisx47b/issues"
 
 [project.scripts]
 market-analysis-by-chrisx47b = "market_analysis_by_chrisx47b.server:main"

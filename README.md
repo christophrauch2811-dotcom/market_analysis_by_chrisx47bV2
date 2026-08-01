@@ -384,6 +384,25 @@ Neue Indikatoren: in `indicators.py` ergaenzen (die `ta`-Bibliothek deckt
 Neue Quelle: neues Modul unter `sources/` nach dem Muster von `crypto_com.py` anlegen
 und in `server.py` als `@mcp.tool()` einbinden.
 
+## Retry-Verhalten
+
+Alle HTTP-Aufrufe (Crypto.com, Binance, Bybit) haben einen 10s-Timeout und
+wiederholen bei transienten Netzwerkfehlern (Timeout, ConnectionError) bis zu
+2x mit exponentiellem Backoff (1s, 2s) -- ohne neue Abhängigkeit
+(`retry_with_backoff` in `cache.py`, reines Python + `requests`, das schon
+Abhängigkeit ist). Nach dem letzten Versuch wird die ursprüngliche Exception
+unverändert weitergereicht, nichts wird verschluckt. Getestet: Erfolg nach
+mehreren Fehlversuchen sowie korrektes Scheitern nach Erschöpfung aller
+Versuche.
+
+**Bewusst nicht umgesetzt** (aus einem externen Review vorgeschlagen, aber
+abgelehnt, um den Tool-Umfang/die Komplexität nicht unnötig aufzublähen):
+13 zusätzliche Tools (Portfolio-Risiko, Orderbuch-Imbalance, Price-Alerts,
+Economic-Calendar etc. -- würden den gerade erst gesenkten
+Tool-Schema-Overhead wieder erhöhen), Async-Rewrite (httpx/anyio -- Overkill
+für Einzelnutzer-Sessions), volles Pydantic-Layer (FastMCP validiert Typen
+bereits), SQLite/Parquet-Persistenz, WebSocket-Bridge, strukturiertes Logging.
+
 ## Bekannte Einschraenkungen
 
 - **TradingView** hat keine offizielle Public API. `tradingview-ta` nutzt denselben

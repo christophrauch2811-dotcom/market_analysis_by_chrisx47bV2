@@ -13,7 +13,7 @@ WICHTIG (per Doku verifiziert, nicht angenommen):
 import requests
 import pandas as pd
 
-from ..cache import ttl_cache, RateLimiter
+from ..cache import ttl_cache, RateLimiter, retry_with_backoff
 
 BASE_URL = "https://api.bybit.com"
 
@@ -26,6 +26,7 @@ INTERVAL_MAP = {
 bybit_limiter = RateLimiter(max_calls=15, per_seconds=1.0)
 
 
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
 def _get(path: str, params: dict) -> dict:
     bybit_limiter.acquire()
     resp = requests.get(f"{BASE_URL}{path}", params=params, timeout=10)

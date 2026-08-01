@@ -7,7 +7,7 @@ Doku: https://developers.binance.com/docs/binance-spot-api-docs/rest-api/market-
 import requests
 import pandas as pd
 
-from ..cache import ttl_cache, RateLimiter
+from ..cache import ttl_cache, RateLimiter, retry_with_backoff
 
 BASE_URL = "https://api.binance.com"
 
@@ -19,6 +19,7 @@ binance_limiter = RateLimiter(max_calls=15, per_seconds=1.0)
 
 
 @ttl_cache(seconds=30)
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
 def get_candlestick(symbol: str, timeframe: str = "1h", count: int = 200) -> pd.DataFrame:
     """
     symbol: z.B. 'BTCUSDT' (Binance nutzt keine Unterstriche)
@@ -44,6 +45,7 @@ def get_candlestick(symbol: str, timeframe: str = "1h", count: int = 200) -> pd.
 
 
 @ttl_cache(seconds=5)
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
 def get_ticker(symbol: str) -> dict:
     binance_limiter.acquire()
     resp = requests.get(f"{BASE_URL}/api/v3/ticker/24hr", params={"symbol": symbol}, timeout=10)
@@ -52,6 +54,7 @@ def get_ticker(symbol: str) -> dict:
 
 
 @ttl_cache(seconds=5)
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
 def get_order_book(symbol: str, depth: int = 100) -> dict:
     binance_limiter.acquire()
     resp = requests.get(f"{BASE_URL}/api/v3/depth", params={"symbol": symbol, "limit": depth}, timeout=10)
@@ -60,6 +63,7 @@ def get_order_book(symbol: str, depth: int = 100) -> dict:
 
 
 @ttl_cache(seconds=3600)
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
 def list_instruments() -> list:
     binance_limiter.acquire()
     resp = requests.get(f"{BASE_URL}/api/v3/exchangeInfo", timeout=10)

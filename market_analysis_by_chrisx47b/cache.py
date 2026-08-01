@@ -15,7 +15,34 @@ import time
 import functools
 import threading
 
+import requests
+
 _LOCK = threading.Lock()
+
+
+def retry_with_backoff(max_attempts: int = 3, base_delay: float = 1.0,
+                        retry_on: tuple = (requests.exceptions.RequestException,)):
+    """Wiederholt einen fehlschlagenden API-Call mit exponentiellem Backoff
+    (base_delay, base_delay*2, base_delay*4, ...). Faengt nur transiente
+    Netzwerkfehler (Timeout, ConnectionError, 5xx via raise_for_status) --
+    kein tenacity/httpx noetig, reine Standardbibliothek + requests, das
+    schon Abhaengigkeit ist. Nach dem letzten Versuch wird die Exception
+    unveraendert weitergereicht (kein Verschlucken echter Fehler).
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exc = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except retry_on as e:
+                    last_exc = e
+                    if attempt < max_attempts - 1:
+                        time.sleep(base_delay * (2 ** attempt))
+            raise last_exc
+        return wrapper
+    return decorator
 
 
 def ttl_cache(seconds: float = 30.0, maxsize: int = 256):

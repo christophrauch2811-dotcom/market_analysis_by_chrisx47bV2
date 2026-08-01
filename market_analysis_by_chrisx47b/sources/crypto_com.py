@@ -7,7 +7,7 @@ Doku: https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html
 import requests
 import pandas as pd
 
-from ..cache import ttl_cache, crypto_com_limiter
+from ..cache import ttl_cache, crypto_com_limiter, retry_with_backoff
 
 BASE_URL = "https://api.crypto.com/exchange/v1"
 
@@ -18,6 +18,7 @@ TIMEFRAME_MAP = {
 
 
 @ttl_cache(seconds=30)
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
 def get_candlestick(symbol: str, timeframe: str = "1h", count: int = 200) -> pd.DataFrame:
     """
     symbol: z.B. 'BTCUSD-PERP' oder 'BTC_USDT'
@@ -40,6 +41,7 @@ def get_candlestick(symbol: str, timeframe: str = "1h", count: int = 200) -> pd.
 
 
 @ttl_cache(seconds=5)
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
 def get_ticker(symbol: str) -> dict:
     crypto_com_limiter.acquire()
     resp = requests.get(f"{BASE_URL}/public/get-tickers", params={"instrument_name": symbol}, timeout=10)
@@ -48,6 +50,7 @@ def get_ticker(symbol: str) -> dict:
 
 
 @ttl_cache(seconds=5)
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
 def get_order_book(symbol: str, depth: int = 10) -> dict:
     crypto_com_limiter.acquire()
     resp = requests.get(
@@ -58,6 +61,7 @@ def get_order_book(symbol: str, depth: int = 10) -> dict:
 
 
 @ttl_cache(seconds=3600)
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
 def list_instruments() -> list:
     crypto_com_limiter.acquire()
     resp = requests.get(f"{BASE_URL}/public/get-instruments", timeout=10)

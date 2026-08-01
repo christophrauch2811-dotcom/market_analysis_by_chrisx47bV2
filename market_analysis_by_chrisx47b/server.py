@@ -27,6 +27,7 @@ from .indicators import compute_all_indicators, fibonacci_retracement, latest_sn
 from .rl_features import build_feature_vector, build_model_feature_vector, FEATURE_SCHEMA_VERSION, feature_schema_hash
 from .regime import detect_regime
 from .extended_indicators import compute_extended_indicators
+from . import pinescript_generator as pine_generator
 from .data_quality import validate_ohlcv
 from .feature_selection import correlation_report, build_core_feature_vector, CORE_FEATURE_SET
 from .monitoring import alert_manager, health_monitor, alert_on_data_quality
@@ -165,6 +166,57 @@ def tradingview_summary(symbol: str, exchange: str, screener: str, interval: str
     result = tradingview.get_technical_summary(symbol, exchange, screener, interval)
     result["disclaimer"] = DISCLAIMER
     return result
+
+
+@mcp.tool()
+def create_pinescript_indicator(name: str, components: list[str], overlay: bool = False) -> dict:
+    """Erstellt ein Pine-Script-v6-Indikator-Skript zum Einfuegen in TradingViews
+    Pine-Editor. components kombiniert beliebig viele der folgenden Bausteine
+    (auch mehrfach, z.B. ['ema','ema'] fuer zwei EMAs mit unterschiedlicher Laenge):
+    sma, ema, rsi, macd, bollinger, atr, supertrend, vwap, adx, stochastic.
+
+    overlay: True legt das Skript standardmaessig auf das Preischart, False
+    (Standard) gibt Oszillatoren ein eigenes Panel und zeigt MA/Bollinger/
+    Supertrend/VWAP trotzdem via force_overlay auf dem Chart.
+
+    WICHTIG: Der Code wurde NICHT compiliert (kein Pine-Compiler verfuegbar) --
+    bitte im TradingView Pine-Editor pruefen, bevor du ihn nutzt.
+    """
+    code = pine_generator.generate_pine_indicator(name, components, overlay=overlay)
+    return {
+        "name": name, "components": components, "pine_script": code,
+        "warning": "Nicht compiliert -- bitte im TradingView Pine-Editor verifizieren.",
+    }
+
+
+@mcp.tool()
+def create_pinescript_strategy(name: str, entry_method: str = "ema_cross", direction: str = "both",
+                                exit_method: str = "percent", stop_loss_pct: float = 2.0,
+                                take_profit_pct: float = 4.0, atr_stop_mult: float = 2.0,
+                                atr_take_profit_mult: float = 4.0, atr_length: int = 14) -> dict:
+    """Erstellt ein Pine-Script-v6-Strategie-Skript (strategy.entry/strategy.exit)
+    zum Einfuegen in TradingViews Pine-Editor -- lauffaehig in TradingViews
+    eigenem Strategy Tester. Dieser Connector backtestet bewusst nicht selbst
+    (siehe fruehere Entscheidung); das hier delegiert stattdessen an
+    TradingViews eigene Backtesting-Infrastruktur.
+
+    entry_method: 'ema_cross', 'rsi_reversion', 'supertrend_flip', 'breakout_donchian'
+    direction: 'long_only', 'short_only', 'both'
+    exit_method: 'percent' (stop_loss_pct/take_profit_pct) oder 'atr' (atr_stop_mult/atr_take_profit_mult)
+
+    WICHTIG: Der Code wurde NICHT compiliert (kein Pine-Compiler verfuegbar) --
+    bitte im TradingView Pine-Editor pruefen/backtesten, bevor du ihn nutzt.
+    """
+    code = pine_generator.generate_pine_strategy(
+        name, entry_method=entry_method, direction=direction, exit_method=exit_method,
+        stop_loss_pct=stop_loss_pct, take_profit_pct=take_profit_pct,
+        atr_stop_mult=atr_stop_mult, atr_take_profit_mult=atr_take_profit_mult, atr_length=atr_length,
+    )
+    return {
+        "name": name, "entry_method": entry_method, "direction": direction,
+        "exit_method": exit_method, "pine_script": code,
+        "warning": "Nicht compiliert -- bitte im TradingView Pine-Editor verifizieren/backtesten.",
+    }
 
 
 # ---------------------------------------------------------------------------

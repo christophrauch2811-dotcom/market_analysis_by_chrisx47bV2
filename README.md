@@ -58,6 +58,8 @@ Danach stehen die Tools in jeder Claude-Code-Session zur Verfuegung, z.B.:
 | `binance_candles` / `binance_ticker` / `binance_order_book` / `binance_indicators` | Binance | Analog zu den Crypto.com-Tools |
 | `bybit_candles` / `bybit_ticker` / `bybit_order_book` / `bybit_indicators` | Bybit | Analog, mit zusätzlichem `category`-Parameter (`spot`/`linear`/`inverse`) |
 | `tradingview_summary` | TradingView | Buy/Sell/Neutral-Rating je Indikator |
+| `create_pinescript_indicator` | – | Generiert Pine-Script-v6-Indikator-Code (SMA/EMA/RSI/MACD/Bollinger/ATR/Supertrend/VWAP/ADX/Stochastic) |
+| `create_pinescript_strategy` | – | Generiert Pine-Script-v6-Strategie-Code (Entry/Exit/Stop-Loss), lauffähig in TradingViews eigenem Strategy Tester |
 | `mt5_candles` | MetaTrader5 | OHLCV-Kerzen (nur lokal/Windows) |
 | `mt5_indicators` | MetaTrader5 | Voller Indikator-Satz + Fibonacci |
 | `mt5_account_info` | MetaTrader5 | Kontostand/Equity/Margin |
@@ -196,6 +198,33 @@ sondern in Chunks über `copy_rates_range` -- Ziel sind 5-6+ Jahre.
 - Getestet mit einem simulierten Broker (3 Jahre Cutoff bei 6 Jahren Anfrage)
   -- Chunking, Deduplizierung und Sortierung funktionieren korrekt; echte
   Live-Verifikation mit deinem Broker steht wie bei den anderen MT5-Funktionen noch aus.
+
+### Pine-Script-Generator (`pinescript_generator.py`)
+
+Generiert **Pine Script v6** (aktuelle Version seit Nov. 2024, kein v7) --
+verpflichtende `ta.*`-Namespaces, `input.int()`/`input.float()` statt
+generischem `input()`, `if`-Blöcke statt des in v6 entfernten
+`when=`-Parameters bei `strategy.entry()`.
+
+- **`create_pinescript_indicator`**: kombiniert beliebig viele Bausteine
+  (SMA, EMA, RSI, MACD, Bollinger, ATR, Supertrend, VWAP, ADX, Stochastic) zu
+  einem Skript. Mehrfache gleiche Bausteine (z.B. zwei EMAs) bekommen
+  automatisch durchnummerierte Variablennamen, damit sie nicht kollidieren.
+- **`create_pinescript_strategy`**: vier Entry-Methoden (EMA-Crossover,
+  RSI-Reversion, Supertrend-Flip, Donchian-Breakout) × zwei Exit-Methoden
+  (prozentual oder ATR-basiert) × long/short/beide -- lauffähig in
+  TradingViews eigenem Strategy Tester. **Bewusst delegiert**: dieser
+  Connector backtestet nicht selbst (siehe frühere Entscheidung), das hier
+  gibt dir stattdessen fertigen Code für TradingViews eigene
+  Backtesting-Infrastruktur.
+
+⚠️ **Der generierte Code wurde NICHT compiliert** -- es gibt keinen
+Pine-Script-Compiler in dieser Umgebung. Die Syntax folgt den verifizierten
+v6-Konventionen und wurde strukturell geprüft (Klammern-Balance, korrekte
+Variablennamen bei Mehrfach-Komponenten, alle 10 Indikator-Bausteine und
+alle 32 Entry/Exit/Richtungs-Kombinationen der Strategie durchgetestet) --
+das ist aber kein Ersatz für eine echte Compilierung. **Bitte jeden
+generierten Code im TradingView Pine-Editor prüfen, bevor du ihn nutzt.**
 
 ### Monitoring & Alerting (`monitoring.py`)
 

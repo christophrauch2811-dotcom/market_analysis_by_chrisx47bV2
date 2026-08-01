@@ -66,7 +66,8 @@ Danach stehen die Tools in jeder Claude-Code-Session zur Verfuegung, z.B.:
 | `mt5_download_csv` | MetaTrader5 | Wie oben, speichert die volle Historie als CSV lokal auf der Festplatte |
 | `list_available_indicators` | – | Liste aller berechneten Indikatoren |
 | `market_regime` | crypto/binance/bybit/mt5 | Eigenständige Regime-/Trenderkennung (Trendrichtung/-stärke, Marktstruktur, Volatilitätsregime) |
-| `rl_feature_vector` | crypto/binance/bybit/mt5 | RL-Feature-Vektor, `mode='model'` (154 skaleninvariante Features, Standard) oder `mode='raw'` (210, inkl. absoluter Preisniveaus) |
+| `rl_feature_vector` | crypto/binance/bybit/mt5 | RL-Feature-Vektor, `mode='model'` (183 skaleninvariante Features, Standard) oder `mode='raw'` (249, inkl. absoluter Preisniveaus) |
+| `extended_indicators` | crypto/binance/bybit/mt5 | 39 zusätzliche Indikatoren (Supertrend, TRIX, Vortex, PPO/PVO, Stochastic RSI, Hull MA, VWMA, Connors RSI, Fisher Transform, Williams Alligator etc.) |
 | `rl_core_feature_vector` | crypto/binance/bybit/mt5 | Handkuratiertes Core-Set (61 Features, weniger Redundanz) |
 | `check_data_quality` | crypto/binance/bybit/mt5 | Prüft Lücken, Duplikate, OHLC-Inkonsistenzen, Preisspünge -- ohne Features zu berechnen |
 | `analyze_feature_correlation` | crypto/binance/bybit/mt5 | Findet stark korrelierte Feature-Paare über echte Historie |
@@ -121,6 +122,32 @@ kein API-Key nötig.
   Standard-RSS-2.0-Format und wurde gegen ein synthetisches Beispieldokument
   getestet, aber ich konnte die echten Feed-Inhalte aus dieser Sandbox nicht
   abrufen (Netzwerk-Domain nicht freigegeben). Bitte lokal verifizieren.
+
+### Erweiterte Indikatoren (`extended_indicators.py`) -- Abgleich gegen TradingView
+
+TradingView listet öffentlich ~150 echte technische Preis-/Volumen-Indikatoren
+(nach Abzug von On-Chain-Metriken, Fundamentaldaten, ETF-Flows etc. --
+[Quelle](https://www.tradingview.com/support/folders/43000587405-built-in-indicators/)).
+Ein systematischer Abgleich gegen unseren bisherigen Satz ergab ~20 bekannte
+Lücken, die hier geschlossen wurden:
+
+- **Aus der `ta`-Bibliothek angebunden**: TRIX, KST, DPO, Vortex Indicator,
+  PPO/PVO, Stochastic RSI, ADL, Ease of Movement, NVI, PVT, Mass Index
+- **Selbst implementiert** (nicht in `ta` enthalten, Standardformeln):
+  Supertrend, Hull Moving Average, VWMA, Chande Momentum Oscillator,
+  Chaikin Oscillator, Williams Alligator, Fisher Transform, Connors RSI
+
+Getestet mit synthetischen Trend-Daten: Supertrend erkennt Auf-/Abwärtstrend
+korrekt, Hull MA reagiert wie erwartet schneller auf Preisänderungen als ein
+klassischer SMA gleicher Länge, alle Wertebereiche (RSI-artige 0-100,
+Oszillatoren etc.) plausibel.
+
+**Bewusst nicht abgedeckt**: Chande Kroll Stop, Klinger Oscillator, McGinley
+Dynamic, SMI Ergodic, DEMA/TEMA, Woodies CCI, Rob-Booker-Indikatoren, Zig
+Zag, Williams Fractal -- Nische/selten genutzt oder inhaltlich redundant mit
+der bereits vorhandenen Swing-Erkennung (`chart_patterns.py`). Die 100.000+
+Community-Pine-Scripts sind kein fester Standard und kein sinnvoll
+erreichbares Ziel.
 
 ### Chart-Pattern-Erkennung (`chart_patterns.py`)
 

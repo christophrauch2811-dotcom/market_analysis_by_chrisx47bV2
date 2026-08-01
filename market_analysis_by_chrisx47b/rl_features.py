@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 import ta
 from . import regime as regime_mod
+from . import extended_indicators as ext_mod
 
 
 def _safe(x):
@@ -382,6 +383,17 @@ def _statistical_features(df: pd.DataFrame) -> dict:
 # 14. Regime/Trend (aus dem eigenstaendigen regime.py-Modul)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Erweiterte Indikatoren (aus dem eigenstaendigen extended_indicators.py-Modul)
+# ---------------------------------------------------------------------------
+
+def _extended_indicator_features(df: pd.DataFrame) -> dict:
+    try:
+        return ext_mod.compute_extended_indicators(df)
+    except AssertionError:
+        return {}
+
+
 def _regime_features(df: pd.DataFrame) -> dict:
     try:
         r = regime_mod.detect_regime(df)
@@ -474,6 +486,7 @@ def build_feature_vector(df: pd.DataFrame, position_state: dict | None = None) -
     raw.update(_risk_features(df))
     raw.update(_session_features(df))
     raw.update(_statistical_features(df))
+    raw.update(_extended_indicator_features(df))
     raw.update(_regime_features(df))
     raw.update(_position_state_features(position_state))
 
@@ -512,6 +525,9 @@ ABSOLUTE_PRICE_KEYS = {
     "atr_stop_long", "atr_stop_short", "swing_low_stop", "swing_high_stop",
     "risk_per_unit_atr", "suggested_risk_reward_2r_long", "suggested_risk_reward_2r_short",
     "volatility_based_position_scale",
+    # Erweiterte Indikatoren (Rohpreise/kumulative Volumengroessen -- *_pct-Varianten bleiben)
+    "dpo", "adl", "nvi", "pvt", "hull_ma_9", "vwma_20", "supertrend_value",
+    "alligator_jaw", "alligator_teeth", "alligator_lips",
 }
 
 

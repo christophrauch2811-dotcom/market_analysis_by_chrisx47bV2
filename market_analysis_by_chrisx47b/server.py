@@ -26,6 +26,7 @@ from . import source_router
 from .indicators import compute_all_indicators, fibonacci_retracement, latest_snapshot
 from .rl_features import build_feature_vector, build_model_feature_vector, FEATURE_SCHEMA_VERSION, feature_schema_hash
 from .regime import detect_regime
+from .extended_indicators import compute_extended_indicators
 from .data_quality import validate_ohlcv
 from .feature_selection import correlation_report, build_core_feature_vector, CORE_FEATURE_SET
 from .monitoring import alert_manager, health_monitor, alert_on_data_quality
@@ -258,6 +259,20 @@ def market_regime(symbol: str, source: str = "crypto", timeframe: str = "1h", co
     return {"symbol": symbol, "source": source, "timeframe": timeframe, "regime": regime}
 
 
+@mcp.tool()
+def extended_indicators(symbol: str, source: str = "crypto", timeframe: str = "1h", count: int = 200) -> dict:
+    """Erweiterte Indikatoren, die im urspruenglichen Satz fehlten (Abgleich
+    gegen TradingViews eingebaute Indikatoren-Liste): Supertrend, TRIX, KST,
+    DPO, Vortex, PPO/PVO, Stochastic RSI, Hull MA, VWMA, Chande Momentum
+    Oscillator, Chaikin Oscillator, Williams Alligator, Fisher Transform,
+    Connors RSI, ADL, Ease of Movement, NVI, PVT, Mass Index.
+    """
+    df = source_router.get_candles(source, symbol, timeframe, count)
+    result = compute_extended_indicators(df)
+    return {"symbol": symbol, "source": source, "timeframe": timeframe,
+            "indicators": result, "disclaimer": DISCLAIMER}
+
+
 # ---------------------------------------------------------------------------
 # RL-Feature-Vektor (100+ Features fuer Reinforcement-Learning-Agenten)
 # ---------------------------------------------------------------------------
@@ -359,6 +374,7 @@ def list_rl_feature_categories() -> dict:
         "stop_loss_risiko": rf._risk_features(df),
         "session_zeit": rf._session_features(df),
         "statistik": rf._statistical_features(df),
+        "erweiterte_indikatoren": rf._extended_indicator_features(df),
         "regime_trend": rf._regime_features(df),
         "positions_state": rf._position_state_features(None),
     }

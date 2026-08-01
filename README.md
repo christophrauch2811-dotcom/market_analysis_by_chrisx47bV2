@@ -1,9 +1,11 @@
 # Trading MCP Connector
 
 Ein MCP-Server, der Claude Code (oder jedem MCP-faehigen Client) Marktdaten und
-technische Indikatoren aus drei Quellen bereitstellt:
+technische Indikatoren aus fuenf Quellen bereitstellt:
 
 - **Crypto.com** – oeffentliche REST-API, kein API-Key noetig (Candles, Ticker, Orderbuch)
+- **Binance** – oeffentliche REST-API, kein API-Key noetig
+- **Bybit** – oeffentliche v5-API, kein API-Key noetig (Spot/Linear/Inverse)
 - **TradingView** – inoffizielle technische Analyse-Zusammenfassung (`tradingview-ta`)
 - **MetaTrader5** – nur nutzbar, wenn der Server lokal auf Windows mit laufendem MT5-Terminal gestartet wird
 
@@ -53,19 +55,63 @@ Danach stehen die Tools in jeder Claude-Code-Session zur Verfuegung, z.B.:
 | `crypto_ticker` | Crypto.com | Aktueller Preis/24h-Change |
 | `crypto_order_book` | Crypto.com | Orderbuch |
 | `crypto_indicators` | Crypto.com | Voller Indikator-Satz + Fibonacci |
+| `binance_candles` / `binance_ticker` / `binance_order_book` / `binance_indicators` | Binance | Analog zu den Crypto.com-Tools |
+| `bybit_candles` / `bybit_ticker` / `bybit_order_book` / `bybit_indicators` | Bybit | Analog, mit zusätzlichem `category`-Parameter (`spot`/`linear`/`inverse`) |
 | `tradingview_summary` | TradingView | Buy/Sell/Neutral-Rating je Indikator |
 | `mt5_candles` | MetaTrader5 | OHLCV-Kerzen (nur lokal/Windows) |
 | `mt5_indicators` | MetaTrader5 | Voller Indikator-Satz + Fibonacci |
 | `mt5_account_info` | MetaTrader5 | Kontostand/Equity/Margin |
 | `mt5_open_positions` | MetaTrader5 | Offene Positionen |
 | `list_available_indicators` | – | Liste aller berechneten Indikatoren |
-| `market_regime` | Crypto.com/MT5 | Eigenständige Regime-/Trenderkennung (Trendrichtung/-stärke, Marktstruktur, Volatilitätsregime) |
-| `rl_feature_vector` | Crypto.com/MT5 | RL-Feature-Vektor, `mode='model'` (154 skaleninvariante Features, Standard) oder `mode='raw'` (210, inkl. absoluter Preisniveaus) |
-| `rl_core_feature_vector` | Crypto.com/MT5 | Handkuratiertes Core-Set (61 Features, weniger Redundanz) |
-| `check_data_quality` | Crypto.com/MT5 | Prüft Lücken, Duplikate, OHLC-Inkonsistenzen, Preisspünge -- ohne Features zu berechnen |
-| `analyze_feature_correlation` | Crypto.com/MT5 | Findet stark korrelierte Feature-Paare über echte Historie |
-| `backtest_breakout` | Crypto.com/MT5 | Vereinfachter Sanity-Check für die Donchian-Breakout-Logik |
+| `market_regime` | crypto/binance/bybit/mt5 | Eigenständige Regime-/Trenderkennung (Trendrichtung/-stärke, Marktstruktur, Volatilitätsregime) |
+| `rl_feature_vector` | crypto/binance/bybit/mt5 | RL-Feature-Vektor, `mode='model'` (154 skaleninvariante Features, Standard) oder `mode='raw'` (210, inkl. absoluter Preisniveaus) |
+| `rl_core_feature_vector` | crypto/binance/bybit/mt5 | Handkuratiertes Core-Set (61 Features, weniger Redundanz) |
+| `check_data_quality` | crypto/binance/bybit/mt5 | Prüft Lücken, Duplikate, OHLC-Inkonsistenzen, Preisspünge -- ohne Features zu berechnen |
+| `analyze_feature_correlation` | crypto/binance/bybit/mt5 | Findet stark korrelierte Feature-Paare über echte Historie |
+| `backtest_breakout` | crypto/binance/bybit/mt5 | Vereinfachter Sanity-Check für die Donchian-Breakout-Logik |
 | `list_rl_feature_categories` | – | Anzahl Features je Kategorie (raw/model/core) |
+| `check_connector_health` | crypto/binance/bybit | Pingt jede Quelle, misst Latenz, meldet Alerts bei Fehlern |
+| `get_source_uptime` | – | Erfolgsquote der Health-Checks je Quelle seit Prozessstart |
+| `get_recent_alerts` | – | Letzte Alerts (Datenqualität, Health-Check-Fehler) |
+
+### Binance & Bybit
+
+Beide Anbindungen wurden gegen die echte API-Dokumentation verifiziert (nicht
+aus dem Gedächtnis geraten):
+
+- **Binance**: Standard-Intervalle (`1m`...`1M`) entsprechen 1:1 unseren Keys.
+  Kerzen kommen aufsteigend sortiert, Zahlen als Strings (wird automatisch zu
+  float konvertiert).
+- **Bybit** (v5-API): braucht zwingend einen `category`-Parameter
+  (`spot`/`linear`/`inverse`). **Kerzen kommen absteigend sortiert (neueste
+  zuerst)** -- der Code dreht das automatisch um. Jede Antwort hat ein
+  `retCode`-Feld, das auf `0` geprüft wird; alles andere wirft eine Exception
+  mit der Originalmeldung.
+
+`market_regime`, `rl_feature_vector`, `rl_core_feature_vector`,
+`check_data_quality`, `analyze_feature_correlation` und `backtest_breakout`
+akzeptieren alle denselben `source`-Parameter (`'crypto'`, `'binance'`,
+`'bybit'`, `'mt5'`) -- neue Quellen werden zentral in `source_router.py`
+registriert, nicht in jedem Tool einzeln.
+
+### Monitoring & Alerting (`monitoring.py`)
+
+- **`check_connector_health`**: pingt Crypto.com/Binance/Bybit mit einer
+  leichten Anfrage (Ticker) und misst Latenz. Ein Fehlschlag erzeugt
+  automatisch einen `critical`-Alert.
+- **`get_source_uptime`**: Erfolgsquote (0.0-1.0) je Quelle aus der
+  In-Memory-Historie seit Prozessstart.
+- **`get_recent_alerts`**: zeigt die letzten Alerts. `rl_feature_vector` und
+  `check_data_quality` melden automatisch einen `warning`-Alert, wenn
+  `validate_ohlcv()` Probleme findet -- die Berechnung läuft trotzdem weiter,
+  der Alert ist nur ein Signal nach außen.
+- **Webhook**: Wird die Umgebungsvariable `ALERT_WEBHOOK_URL` gesetzt (Slack-
+  oder Discord-Incoming-Webhook), gehen `warning`/`critical`-Alerts
+  zusätzlich dorthin (`{"text": "[LEVEL] quelle: nachricht"}`). Ohne gesetzte
+  Variable bleiben Alerts nur im In-Memory-Log (`get_recent_alerts`).
+- Bewusst simpel (kein externer Dienst, keine Datenbank) -- der Zustand ist
+  prozessgebunden und geht beim Neustart des Servers verloren. Für einen
+  produktionsreifen Einsatz wäre ein persistentes Log (Datei/DB) der nächste Schritt.
 
 ### Ehrliche Grenzen & was seit dem letzten Review verbessert wurde
 

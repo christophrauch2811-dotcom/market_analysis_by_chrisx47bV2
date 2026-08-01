@@ -17,13 +17,13 @@ Alle Ausgaben sind informativ/technischer Natur, keine Anlageberatung.
 **Direkt aus GitHub (empfohlen):**
 
 ```bash
-pip install git+https://github.com/<dein-username>/market-analysis-by-chrisx47b.git
+pip install git+https://github.com/christophrauch2811-dotcom/market-analysis-by-chrisx47b.git
 ```
 
 **Lokal aus dem Repo:**
 
 ```bash
-git clone https://github.com/<dein-username>/market-analysis-by-chrisx47b.git
+git clone https://github.com/christophrauch2811-dotcom/market-analysis-by-chrisx47b.git
 cd market-analysis-by-chrisx47b
 pip install .
 ```

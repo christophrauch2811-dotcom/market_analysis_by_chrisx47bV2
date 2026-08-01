@@ -62,6 +62,8 @@ Danach stehen die Tools in jeder Claude-Code-Session zur Verfuegung, z.B.:
 | `mt5_indicators` | MetaTrader5 | Voller Indikator-Satz + Fibonacci |
 | `mt5_account_info` | MetaTrader5 | Kontostand/Equity/Margin |
 | `mt5_open_positions` | MetaTrader5 | Offene Positionen |
+| `mt5_max_history` | MetaTrader5 | Holt bis zu mehrjährige Historie (Ziel 5-6+ Jahre), gibt nur Metadaten zurück |
+| `mt5_download_csv` | MetaTrader5 | Wie oben, speichert die volle Historie als CSV lokal auf der Festplatte |
 | `list_available_indicators` | – | Liste aller berechneten Indikatoren |
 | `market_regime` | crypto/binance/bybit/mt5 | Eigenständige Regime-/Trenderkennung (Trendrichtung/-stärke, Marktstruktur, Volatilitätsregime) |
 | `rl_feature_vector` | crypto/binance/bybit/mt5 | RL-Feature-Vektor, `mode='model'` (154 skaleninvariante Features, Standard) oder `mode='raw'` (210, inkl. absoluter Preisniveaus) |
@@ -145,6 +147,28 @@ Ratchet-Logik stellt sicher, dass sich der Stop nie gegen die Position
 bewegt (long: nur nach oben, short: nur nach unten). `breakeven_check` prüft
 zusätzlich, ob der Preis weit genug gelaufen ist, um auf Breakeven zu
 verschieben.
+
+### Mehrjährige MT5-Historie & CSV-Export (`export.py`)
+
+`mt5_max_history`/`mt5_download_csv` holen historische Kerzen nicht per
+einzelnem `copy_rates_from_pos` (das liefert nur die letzten N Kerzen),
+sondern in Chunks über `copy_rates_range` -- Ziel sind 5-6+ Jahre.
+
+- **Chunking**: Standardmäßig 180-Tage-Fenster, damit einzelne Mehrjahres-
+  Anfragen nicht an Terminal-/Broker-Limits scheitern. Ergebnisse werden
+  dedupliziert und chronologisch sortiert.
+- **Ehrlich über Verfügbarkeit**: Wie viel Historie tatsächlich existiert,
+  entscheidet der Broker -- bei M1 oft nur Monate, bei H1/D1 häufig mehrere
+  Jahre. Die Antwort meldet die *tatsächlich* abgedeckte Zeitspanne, statt
+  einen Fehler zu werfen, wenn weniger als angefragt verfügbar ist.
+- **CSV landet lokal**: Da MT5 nur auf deinem eigenen Windows-Rechner läuft
+  (dort, wo der Server gestartet wird), schreibt `mt5_download_csv` die
+  Datei direkt auf deine Festplatte -- kein Upload/Download-Umweg. Ohne
+  eigenen `output_path` wird automatisch ein Dateiname aus Symbol/Timeframe/
+  Zeitstempel im aktuellen Arbeitsverzeichnis erzeugt.
+- Getestet mit einem simulierten Broker (3 Jahre Cutoff bei 6 Jahren Anfrage)
+  -- Chunking, Deduplizierung und Sortierung funktionieren korrekt; echte
+  Live-Verifikation mit deinem Broker steht wie bei den anderen MT5-Funktionen noch aus.
 
 ### Monitoring & Alerting (`monitoring.py`)
 

@@ -32,6 +32,7 @@ from .monitoring import alert_manager, health_monitor, alert_on_data_quality
 from .news_filter import get_filtered_news, DEFAULT_FEEDS
 from .chart_patterns import detect_chart_patterns
 from . import stop_management
+from .export import export_ohlcv_csv
 
 mcp = FastMCP("market-analysis-by-chrisx47b")
 
@@ -198,6 +199,46 @@ def mt5_account_info() -> dict:
 def mt5_open_positions() -> list:
     """Aktuell offene Positionen in MT5."""
     return mt5_source.get_open_positions()
+
+
+@mcp.tool()
+def mt5_max_history(symbol: str, timeframe: str = "1h", years_back: float = 6.0, chunk_days: int = 180) -> dict:
+    """Holt so viel historische MT5-Kerzen wie Broker/Terminal fuer `symbol`
+    vorhalten, bis zurueck zu `years_back` Jahren (Ziel: 5-6+ Jahre). Wird in
+    Chunks abgerufen, da einzelne Mehrjahresabfragen je nach Terminal/Broker
+    gekappt werden koennen. Gibt NUR Metadaten zurueck (Zeilenzahl, tatsaechliche
+    Datumsspanne) -- fuer die vollen Kerzen: mt5_download_csv.
+
+    Wie viel Historie tatsaechlich verfuegbar ist, haengt vom Broker ab --
+    das kann bei M1 deutlich weniger als 6 Jahre sein, bei H1/D1 oft mehr.
+    """
+    df = mt5_source.get_max_history(symbol, timeframe, years_back, chunk_days)
+    span_years = round((df.index.max() - df.index.min()).days / 365.25, 2)
+    return {
+        "symbol": symbol, "timeframe": timeframe, "requested_years": years_back,
+        "row_count": len(df), "date_range": (str(df.index.min()), str(df.index.max())),
+        "actual_years_covered": span_years,
+        "note": ("Weniger Jahre als angefragt bedeutet, dass der Broker fuer dieses "
+                 "Symbol/Timeframe nicht mehr Historie vorhaelt, nicht notwendigerweise einen Fehler."),
+    }
+
+
+@mcp.tool()
+def mt5_download_csv(symbol: str, timeframe: str = "1h", years_back: float = 6.0,
+                      chunk_days: int = 180, output_path: str | None = None) -> dict:
+    """Holt die maximal verfuegbare MT5-Historie (Ziel: `years_back` Jahre)
+    und speichert sie als CSV. Da dieser Server nur lokal mit einem laufenden
+    MT5-Terminal funktioniert, landet die Datei direkt auf deiner Festplatte --
+    kein Upload/Download-Schritt noetig. Ohne `output_path` wird automatisch
+    ein Dateiname (Symbol_Timeframe_Zeitstempel.csv) im aktuellen
+    Arbeitsverzeichnis des Server-Prozesses erzeugt.
+    """
+    df = mt5_source.get_max_history(symbol, timeframe, years_back, chunk_days)
+    result = export_ohlcv_csv(df, filepath=output_path, symbol=symbol, timeframe=timeframe)
+    result["symbol"] = symbol
+    result["timeframe"] = timeframe
+    result["requested_years"] = years_back
+    return result
 
 
 # ---------------------------------------------------------------------------

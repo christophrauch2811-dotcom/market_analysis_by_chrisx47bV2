@@ -8,6 +8,9 @@ muss dafuer auf deinem eigenen Windows-Rechner laufen (nicht in einer Cloud/Linu
 pip install MetaTrader5
 """
 
+import time
+from datetime import datetime, timedelta, timezone
+
 import pandas as pd
 
 from ..cache import ttl_cache
@@ -49,6 +52,58 @@ def get_ohlcv(symbol: str, timeframe: str = "1h", count: int = 200) -> pd.DataFr
     df = pd.DataFrame(rates)
     df["time"] = pd.to_datetime(df["time"], unit="s")
     df = df.set_index("time").rename(columns={"tick_volume": "volume"})
+    return df[["open", "high", "low", "close", "volume"]]
+
+
+@ttl_cache(seconds=3600)
+def get_max_history(symbol: str, timeframe: str = "1h", years_back: float = 6.0,
+                     chunk_days: int = 180, pause_seconds: float = 0.05) -> pd.DataFrame:
+    """
+    Holt so viel historische Kerzen wie Broker/Terminal fuer `symbol` vorhalten,
+    bis zurueck zu `years_back` Jahren -- in Chunks von je `chunk_days` Tagen
+    (mt5.copy_rates_range statt copy_rates_from_pos, da Einzelabfragen ueber
+    mehrere Jahre je nach Terminal-Einstellung/Broker gekappt werden koennen).
+
+    EHRLICHER HINWEIS: Wie viel Historie tatsaechlich zurueckkommt, haengt vom
+    Broker ab -- manche halten fuer M1 nur wenige Monate vor, fuer H1/D1 oft
+    deutlich mehr. Diese Funktion fordert `years_back` Jahre an, garantiert
+    aber nicht, dass so viel existiert. Das tatsaechliche Datumsfenster steht
+    im Ergebnis (df.index.min()/.max()) bzw. im 'date_range' des MCP-Tools.
+
+    Damit das Terminal die volle Historie synchronisiert, wird das Symbol per
+    symbol_select() aktiv in die Market-Watch aufgenommen (viele Broker
+    liefern sonst nur einen kurzen Ausschnitt).
+    """
+    ensure_connection()
+    if not mt5.symbol_select(symbol, True):
+        raise RuntimeError(f"Symbol {symbol} konnte nicht ausgewaehlt werden: {mt5.last_error()}")
+
+    tf = getattr(mt5, TIMEFRAME_MAP.get(timeframe, "TIMEFRAME_H1"))
+    date_to = datetime.now(timezone.utc)
+    date_from_total = date_to - timedelta(days=int(365.25 * years_back))
+
+    chunks = []
+    cursor_end = date_to
+    while cursor_end > date_from_total:
+        cursor_start = max(date_from_total, cursor_end - timedelta(days=chunk_days))
+        rates = mt5.copy_rates_range(symbol, tf, cursor_start, cursor_end)
+        if rates is not None and len(rates) > 0:
+            chunks.append(pd.DataFrame(rates))
+        cursor_end = cursor_start
+        if pause_seconds:
+            time.sleep(pause_seconds)
+
+    if not chunks:
+        raise RuntimeError(
+            f"Keine historischen Daten fuer {symbol}/{timeframe} verfuegbar "
+            f"(mt5.last_error(): {mt5.last_error()}). Moeglich, dass der Broker "
+            f"fuer dieses Symbol/Timeframe keine Historie in diesem Zeitraum vorhaelt."
+        )
+
+    df = pd.concat(chunks, ignore_index=True)
+    df["time"] = pd.to_datetime(df["time"], unit="s")
+    df = df.drop_duplicates(subset="time").sort_values("time").set_index("time")
+    df = df.rename(columns={"tick_volume": "volume"})
     return df[["open", "high", "low", "close", "volume"]]
 
 

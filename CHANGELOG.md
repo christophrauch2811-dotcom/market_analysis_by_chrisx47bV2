@@ -3,6 +3,21 @@
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionierung nach
 [Semantic Versioning](https://semver.org/) (solange < 1.0.0: Breaking Changes auch in Minor-Releases möglich).
 
+## [0.4.0] - 2026-08-01
+
+### Hinzugefügt
+- `symbol_map.py`: kanonisches Symbol (`BTC/USDT`) <-> quellenspezifisches
+  Format, kuratiert für gängige Coins über alle 8 Krypto-/Multi-Asset-Quellen
+- `compare_sources`-Tool: Preisvergleich für 1 Symbol über mehrere Börsen in
+  einem Aufruf (Symbol-Mapping automatisch), inkl. Spread/günstigste Quelle
+- `verify_live_data.py`: Skript zur echten Netzwerk-Verifikation aller
+  Quellen (nur lokal beim Nutzer lauffähig)
+- 5 weitere Tests (Symbol-Mapping-Rundtrips, compare_sources) -- 40 statt 35
+
+### Geändert
+- 26 → 27 Tools (ein neues Tool, aber netto günstiger als die N Einzelaufrufe,
+  die es ersetzt)
+
 ## [0.3.0] - 2026-08-01
 
 ### Hinzugefügt

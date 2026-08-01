@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "market-analysis-by-chrisx47b"
-version = "0.3.0"
+version = "0.4.0"
 description = "MCP-Connector für Claude Code: Marktdaten, Regime-/Trend-/Chartmuster-Erkennung, News-Filter und Stop-Loss/Trailing aus Crypto.com, Binance, Bybit, TradingView und MetaTrader5"
 readme = "README.md"
 requires-python = ">=3.10"

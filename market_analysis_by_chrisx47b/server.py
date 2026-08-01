@@ -18,6 +18,7 @@ import pandas as pd
 
 from .sources import crypto_com, tradingview, mt5_source, binance, bybit
 from . import source_router
+from . import symbol_map
 from .rl_features import build_feature_vector, build_model_feature_vector, FEATURE_SCHEMA_VERSION, feature_schema_hash
 from .regime import detect_regime
 from .extended_indicators import compute_extended_indicators
@@ -94,6 +95,72 @@ def ticker(symbol: str, source: str = "crypto", category: str = "spot",
         except Exception as e:
             errors[src] = str(e)
     raise RuntimeError(f"Alle Quellen fehlgeschlagen: {errors}")
+
+
+_TICKER_PRICE_FIELDS = {
+    "crypto": lambda t: t.get("a"),
+    "binance": lambda t: t.get("lastPrice"),
+    "bybit": lambda t: t.get("lastPrice"),
+    "kucoin": lambda t: t.get("price"),
+    "kraken": lambda t: (t.get("c") or [None])[0],
+    "bitfinex": lambda t: t.get("last_price"),
+    "yahoo": lambda t: t.get("regularMarketPrice"),
+}
+
+
+def _extract_last_price(ticker_data: dict, source: str, quote: str = "usd") -> float | None:
+    """Jede Quelle nennt 'letzter Preis' anders -- ein Feld-Mapping je Quelle.
+    coingecko ist Sonderfall (Feld = die vs_currency selbst, z.B. 'usd')."""
+    try:
+        if source == "coingecko":
+            return float(ticker_data.get(quote.lower()) or ticker_data.get("usd"))
+        getter = _TICKER_PRICE_FIELDS.get(source)
+        return float(getter(ticker_data)) if getter else None
+    except (TypeError, ValueError):
+        return None
+
+
+@mcp.tool()
+def compare_sources(canonical_symbol: str, sources: list[str], category: str = "spot") -> dict:
+    """Fragt den Preis fuer EIN Symbol ueber mehrere Boersen in einem Aufruf ab
+    (z.B. fuer Arbitrage-Spotting/Konsistenz-Check) -- billiger als N einzelne
+    ticker-Aufrufe. canonical_symbol im Format 'BASE/QUOTE' (z.B. 'BTC/USDT'),
+    wird automatisch je Quelle passend gemappt (symbol_map.py, kuratierte
+    Liste gaengiger Coins). sources z.B. ['binance','bybit','kraken'].
+    """
+    _, _, quote = canonical_symbol.partition("/")
+    results, errors = {}, {}
+
+    for source in sources:
+        try:
+            sym = symbol_map.to_source_symbol(canonical_symbol, source)
+        except ValueError as e:
+            errors[source] = str(e)
+            continue
+        try:
+            raw = source_router.get_ticker(source, sym, category=category)
+            price = _extract_last_price(raw, source, quote)
+            results[source] = {"symbol": sym, "price": price}
+        except Exception as e:
+            errors[source] = str(e)
+
+    prices = {s: r["price"] for s, r in results.items() if r["price"] is not None}
+    spread = None
+    if len(prices) >= 2:
+        cheapest = min(prices, key=prices.get)
+        priciest = max(prices, key=prices.get)
+        lo, hi = prices[cheapest], prices[priciest]
+        spread = {
+            "cheapest_source": cheapest, "cheapest_price": lo,
+            "most_expensive_source": priciest, "most_expensive_price": hi,
+            "spread_abs": round(hi - lo, 8),
+            "spread_pct": round((hi - lo) / lo * 100, 4) if lo else None,
+        }
+
+    return {
+        "canonical_symbol": canonical_symbol, "results": results,
+        "errors": errors, "spread": spread, "disclaimer": DISCLAIMER,
+    }
 
 
 @mcp.tool()

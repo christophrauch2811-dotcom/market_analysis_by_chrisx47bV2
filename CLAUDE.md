@@ -22,7 +22,7 @@ und `CHANGELOG.md`.
 
 ## Architektur
 
-- `server.py` -- alle MCP-Tools (`@mcp.tool()`). **26 Tools, bewusst
+- `server.py` -- alle MCP-Tools (`@mcp.tool()`). **27 Tools, bewusst
   konsolidiert** -- siehe "Kosten/Token-Konventionen" unten, bevor neue Tools
   ergänzt werden.
 - `source_router.py` -- zentraler Dispatcher für candles/ticker/order_book
@@ -47,7 +47,13 @@ und `CHANGELOG.md`.
 - `monitoring.py` -- Health-Checks/Alerts jetzt PERSISTENT (JSONL-Datei,
   Pfad via `MARKET_ANALYSIS_HISTORY_FILE`, Default im Arbeitsverzeichnis).
   Datei ist in `.gitignore` -- niemals versehentlich committen.
-- `tests/` -- pytest-Suite (35 Tests), siehe "Testen" unten.
+- `symbol_map.py` -- kanonisches Symbol (`BTC/USDT`) <-> quellenspezifisches
+  Format. Kuratiert fuer gaengige Coins, KEIN universeller Parser -- neue
+  Coins/Quellen brauchen einen expliziten Eintrag in `_COINGECKO_IDS` etc.
+  Genutzt von `compare_sources` in `server.py`.
+- `tests/` -- pytest-Suite (40 Tests), siehe "Testen" unten.
+- `verify_live_data.py` -- Skript fuer ECHTE Netzwerk-Verifikation aller
+  Quellen (nur lokal beim Nutzer lauffaehig, nicht in dieser Sandbox/CI).
 - `CHANGELOG.md` -- Versionshistorie, Keep-a-Changelog-Format.
 
 ## Setup
@@ -134,6 +140,13 @@ auffielen (siehe Fixes unten).
     siehe `monitoring.py`) ist bewusst in `.gitignore` -- das ist Laufzeit-
     Zustand, kein Code. Beim Verpacken/Committen darauf achten, dass sie
     nicht versehentlich mit reinrutscht.
+12. **Ticker-Preisfeld heisst bei jeder Quelle anders** (`a` bei Crypto.com,
+    `lastPrice` bei Binance/Bybit, `price` bei KuCoin, `c[0]` bei Kraken,
+    `last_price` bei Bitfinex, die vs_currency selbst bei CoinGecko,
+    `regularMarketPrice` bei Yahoo) -- `_TICKER_PRICE_FIELDS` in `server.py`
+    (genutzt von `compare_sources`) haelt das Mapping. Bei neuer Quelle
+    IMMER ergaenzen, sonst liefert `compare_sources` fuer diese Quelle `None`
+    statt eines Fehlers (stiller Bug, kein Crash).
 
 ## Kosten/Token-Konventionen (wichtig für neue Tools)
 

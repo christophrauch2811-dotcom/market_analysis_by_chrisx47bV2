@@ -77,7 +77,7 @@ Danach stehen die Tools in jeder Claude-Code-Session zur Verfügung, z.B.:
 
 ## Verfügbare Tools
 
-**26 Tools**, bewusst konsolidiert -- die meisten akzeptieren einen
+**27 Tools**, bewusst konsolidiert -- die meisten akzeptieren einen
 `source`-Parameter statt eines eigenen Tools pro Quelle (siehe
 [Kosten/Token-Effizienz](#kostentoken-effizienz)).
 
@@ -85,6 +85,7 @@ Danach stehen die Tools in jeder Claude-Code-Session zur Verfügung, z.B.:
 |---|---|---|
 | `candles` | alle 9 | OHLCV-Kerzen, optionaler `fallback_sources`-Parameter für automatischen Failover |
 | `ticker` | crypto/binance/bybit/kucoin/kraken/bitfinex/coingecko/yahoo | Aktueller Preis/24h-Change/Volumen, ebenfalls mit Failover |
+| `compare_sources` | binance/bybit/kraken/kucoin/bitfinex/coingecko/yahoo/crypto | Preis für 1 Symbol über mehrere Börsen in einem Aufruf, inkl. Spread/günstigste Quelle -- Symbol wird automatisch je Quelle gemappt |
 | `order_book` | crypto/binance/bybit/kraken/bitfinex | Orderbuch (Bids/Asks) |
 | `tradingview_summary` | TradingView | Buy/Sell/Neutral-Rating je Indikator |
 | `create_pinescript_indicator` | – | Generiert Pine-Script-v6-Indikator-Code, speichert optional als `.txt` |
@@ -304,6 +305,40 @@ KuCoin: konservative Schätzungen, da keine exakten öffentlichen IP-Limits
 dokumentiert sind; Yahoo Finance: sehr konservativ, da inoffizielle API ohne
 dokumentiertes Limit).
 
+### Symbol-Mapping (`symbol_map.py`)
+
+Übersetzt ein kanonisches Symbol (`BTC/USDT`) automatisch in das
+quellenspezifische Format:
+
+```python
+from market_analysis_by_chrisx47b.symbol_map import to_source_symbol
+to_source_symbol("BTC/USDT", "kraken")    # -> "XBTUSDT"
+to_source_symbol("BTC/USDT", "bitfinex")  # -> "tBTCUST"
+to_source_symbol("BTC/USDT", "coingecko") # -> "bitcoin"
+```
+
+Kuratiert für gängige Coins (BTC, ETH, SOL, XRP, ADA, DOGE, BNB, LTC, DOT,
+AVAX, LINK, MATIC, TRX) -- **kein vollständiger universeller Parser**. Bei
+unbekannten Coins (v.a. CoinGecko-IDs) wirft die Funktion einen klaren
+`ValueError` statt zu raten. `normalize_symbol()` funktioniert umgekehrt
+(quellenspezifisch → kanonisch), Rundtrip-getestet für alle 6 relevanten Quellen.
+
+### Preisvergleich über mehrere Börsen (`compare_sources`)
+
+Fragt den Preis für ein Symbol über mehrere Börsen in **einem** Tool-Aufruf
+ab (Symbol-Mapping automatisch) -- günstiger als N einzelne `ticker`-Aufrufe,
+da der Tool-Schema-Overhead nur einmal statt N-mal anfällt:
+
+```python
+compare_sources(canonical_symbol="BTC/USDT", sources=["binance", "bybit", "kraken"])
+```
+
+Liefert Preis je Quelle plus `spread` (günstigste/teuerste Quelle,
+absolute/prozentuale Differenz) -- nützlich für Arbitrage-Spotting oder
+einen schnellen Konsistenz-Check zwischen Börsen. Getestet mit gemockten,
+unterschiedlichen Preisen je Quelle (korrekte Erkennung von günstigster/
+teuerster Quelle und Spread-Berechnung).
+
 ### Automatischer Failover
 
 `candles`/`ticker` akzeptieren einen optionalen `fallback_sources`-Parameter:
@@ -325,11 +360,23 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-35 Tests, alle mit dokumentationsgetreuen Mock-Antworten (kein Netzwerk
+40 Tests, alle mit dokumentationsgetreuen Mock-Antworten (kein Netzwerk
 nötig, läuft in CI). Deckt Regressionen ab, die in diesem Projekt bereits
 real aufgetreten sind: Crypto.com-Ticker-Endpunkt, Bybit-Sortierung,
 KuCoin/Bitfinex-Spaltenreihenfolge, Kraken-Pair-Key, Ratchet-Logik,
-Feature-Vektor-Größen, Pine-Script-Struktur.
+Feature-Vektor-Größen, Pine-Script-Struktur, Symbol-Mapping-Rundtrips.
+
+### Live-Verifikation (`verify_live_data.py`)
+
+```bash
+python verify_live_data.py
+```
+
+Testet **alle 9 Quellen + News-Filter + TradingView + Symbol-Mapping +
+compare_sources + alle Analyse-Module** mit echten Netzwerkaufrufen -- das
+kann nur lokal laufen (aus der Build-Sandbox nicht möglich). Gibt am Ende
+eine Zusammenfassung (OK/FEHLER je Prüfung). Mit `--verbose` für volle
+Tracebacks bei Fehlern.
 
 ---
 

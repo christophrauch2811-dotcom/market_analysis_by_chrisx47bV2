@@ -23,7 +23,7 @@ INTERVAL_MAP = {
     "1d": "D", "1w": "W", "1M": "M",
 }
 
-bybit_limiter = RateLimiter(max_calls=15, per_seconds=1.0)
+bybit_limiter = RateLimiter(max_calls=10, per_seconds=1.0)  # kein exaktes oeffentliches Limit dokumentiert -- konservative Schaetzung
 
 
 @retry_with_backoff(max_attempts=3, base_delay=1.0)

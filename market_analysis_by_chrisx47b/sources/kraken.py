@@ -21,7 +21,7 @@ TIMEFRAME_MAP = {
     "4h": 240, "1d": 1440, "1w": 10080,
 }
 
-kraken_limiter = RateLimiter(max_calls=15, per_seconds=1.0)
+kraken_limiter = RateLimiter(max_calls=1, per_seconds=1.0)  # Krakens eigene Empfehlung: 1 Request/Sekunde oder weniger
 
 
 @retry_with_backoff(max_attempts=3, base_delay=1.0)

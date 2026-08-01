@@ -1,38 +1,18 @@
-name: smoke-test
+name: tests
 
 on:
   push:
   pull_request:
 
 jobs:
-  test:
+  pytest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install package
-        run: pip install .
-      - name: Smoke test - regime & rl_features on synthetic data
-        run: |
-          python -c "
-          import pandas as pd, numpy as np
-          from market_analysis_by_chrisx47b.regime import detect_regime
-          from market_analysis_by_chrisx47b.rl_features import build_feature_vector
-
-          n = 300
-          price = 100 + np.cumsum(np.random.randn(n))
-          idx = pd.date_range('2024-01-01', periods=n, freq='h')
-          df = pd.DataFrame({
-              'open': price, 'high': price + 1, 'low': price - 1,
-              'close': price, 'volume': np.random.randint(100, 1000, n)
-          }, index=idx)
-
-          r = detect_regime(df)
-          assert 'regime_label' in r
-
-          vec = build_feature_vector(df)
-          assert len(vec) > 150, f'Zu wenige Features: {len(vec)}'
-          print('OK -', len(vec), 'Features,  Regime:', r['regime_label'])
-          "
+      - name: Install package with dev dependencies
+        run: pip install ".[dev]"
+      - name: Run pytest suite
+        run: pytest -v

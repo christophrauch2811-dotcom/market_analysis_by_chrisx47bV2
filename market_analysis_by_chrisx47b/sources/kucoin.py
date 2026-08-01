@@ -20,7 +20,7 @@ TIMEFRAME_MAP = {
     "12h": "12hour", "1d": "1day", "1w": "1week",
 }
 
-kucoin_limiter = RateLimiter(max_calls=15, per_seconds=1.0)
+kucoin_limiter = RateLimiter(max_calls=10, per_seconds=1.0)  # kein exaktes oeffentliches IP-Limit dokumentiert -- konservative Schaetzung
 
 
 @retry_with_backoff(max_attempts=3, base_delay=1.0)

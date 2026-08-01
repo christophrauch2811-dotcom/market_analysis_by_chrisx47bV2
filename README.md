@@ -409,6 +409,27 @@ Neue Indikatoren: in `indicators.py` ergaenzen (die `ta`-Bibliothek deckt
 Neue Quelle: neues Modul unter `sources/` nach dem Muster von `crypto_com.py` anlegen
 und in `server.py` als `@mcp.tool()` einbinden.
 
+## Tests, Failover, Persistenz (v0.3.0)
+
+- **Echte Test-Suite**: `pip install -e ".[dev]"` dann `pytest -v` -- 35 Tests,
+  alle mit dokumentationsgetreuen Mock-Antworten (kein Netzwerk nötig, läuft
+  in CI). Deckt Regressionen ab, die in diesem Projekt bereits real
+  aufgetreten sind (Crypto.com-Endpunkt, Bybit-Sortierung, KuCoin/Bitfinex-
+  Spaltenreihenfolge, Kraken-Pair-Key).
+- **Rate-Limits verifiziert**: alle 8 HTTP-Quellen gegen die jeweils echte
+  Dokumentation geprüft und korrigiert (vorher teils 15-24x zu aggressiv
+  eingestellt, z.B. Kraken/CoinGecko/Bitfinex).
+- **Automatischer Failover**: `candles`/`ticker` akzeptieren einen optionalen
+  `fallback_sources`-Parameter (`[{"source": "binance", "symbol": "BTCUSDT"}]`)
+  -- wird nacheinander versucht, falls die Primärquelle fehlschlägt. Symbol-
+  Format ist je Quelle unterschiedlich, deshalb pro Fallback-Eintrag am
+  besten explizit angeben.
+- **Persistente Historie**: Health-Checks/Alerts landen zusätzlich in einer
+  lokalen JSONL-Datei (`MARKET_ANALYSIS_HISTORY_FILE`, Default im
+  Arbeitsverzeichnis) und werden beim Serverstart wieder geladen -- ein
+  Neustart löscht die Uptime-Historie nicht mehr.
+- **CHANGELOG.md**: Versionshistorie nach Keep-a-Changelog-Format.
+
 ## Retry-Verhalten
 
 Alle HTTP-Aufrufe (Crypto.com, Binance, Bybit) haben einen 10s-Timeout und

@@ -15,10 +15,20 @@ Zwei Bausteine:
 Bewusst ohne externe Abhaengigkeiten (kein Slack-SDK etc.) -- ein simpler
 POST-Request auf eine konfigurierbare Webhook-URL deckt Slack, Discord und
 die meisten "Incoming Webhook"-Integrationen ab.
+
+PERSISTENZ: Beide Historien wurden bisher rein im Prozessspeicher gehalten --
+ein Neustart des Servers hat alles geloescht, es gab keine verlaessliche
+Uptime-Aussage ueber Tage/Wochen. Jetzt wird jeder Eintrag zusaetzlich als
+JSON-Zeile in eine lokale Datei angehaengt (Pfad konfigurierbar via
+MARKET_ANALYSIS_HISTORY_FILE) und beim Start wieder eingelesen. Bewusst
+simpel (append-only JSONL, kein DB-Treiber) -- reicht fuer die Grössenordnung
+eines Einzelnutzer-Connectors. Ab 2 MB Dateigroesse wird beim naechsten
+Schreibvorgang automatisch auf die letzten 1000 Zeilen gekuerzt.
 """
 
 from __future__ import annotations
 import os
+import json
 import time
 import threading
 from collections import deque
@@ -28,12 +38,66 @@ import requests
 
 ALERT_WEBHOOK_URL = os.environ.get("ALERT_WEBHOOK_URL", "").strip()
 MAX_LOG_SIZE = 200
+HISTORY_FILE = os.environ.get(
+    "MARKET_ANALYSIS_HISTORY_FILE",
+    os.path.join(os.getcwd(), "market_analysis_history.jsonl"),
+)
+_MAX_FILE_BYTES = 2 * 1024 * 1024
+_TRIM_TO_LINES = 1000
+_file_lock = threading.Lock()
+
+
+def _append_to_history_file(record: dict) -> None:
+    """Haengt einen Eintrag an die Historie-Datei an. Schreibfehler duerfen
+    den eigentlichen Aufruf nie zum Absturz bringen -- nur best-effort."""
+    try:
+        with _file_lock:
+            if os.path.exists(HISTORY_FILE) and os.path.getsize(HISTORY_FILE) > _MAX_FILE_BYTES:
+                _trim_history_file()
+            with open(HISTORY_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+    except OSError:
+        pass  # Persistenz ist best-effort, kein kritischer Pfad
+
+
+def _trim_history_file() -> None:
+    try:
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            f.writelines(lines[-_TRIM_TO_LINES:])
+    except OSError:
+        pass
+
+
+def _read_history_file(record_type: str) -> list[dict]:
+    """Liest alle Zeilen mit passendem 'type'-Feld. Kaputte/fremde Zeilen
+    werden stillschweigend uebersprungen (z.B. bei manueller Bearbeitung)."""
+    if not os.path.exists(HISTORY_FILE):
+        return []
+    records = []
+    try:
+        with _file_lock, open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if record.get("type") == record_type:
+                    records.append(record)
+    except OSError:
+        return []
+    return records
 
 
 class AlertManager:
     def __init__(self, max_log_size: int = MAX_LOG_SIZE):
         self._log: deque = deque(maxlen=max_log_size)
         self._lock = threading.Lock()
+        # Beim Start bereits vorhandene Alerts aus der Datei nachladen,
+        # damit die Historie einen Neustart ueberlebt.
+        for record in _read_history_file("alert")[-max_log_size:]:
+            self._log.append({k: v for k, v in record.items() if k != "type"})
 
     def send(self, level: str, source: str, message: str, extra: dict | None = None) -> dict:
         """level: 'info' | 'warning' | 'critical'"""
@@ -46,6 +110,7 @@ class AlertManager:
         }
         with self._lock:
             self._log.append(entry)
+        _append_to_history_file({**entry, "type": "alert"})
 
         if ALERT_WEBHOOK_URL and level in ("warning", "critical"):
             try:
@@ -85,6 +150,13 @@ class HealthMonitor:
         self._history: dict[str, deque] = {}
         self._lock = threading.Lock()
         self._history_size = history_size
+        # Beim Start vorhandene Health-Check-Historie je Quelle nachladen.
+        for record in _read_history_file("health_check"):
+            source_name = record.get("source")
+            if not source_name:
+                continue
+            entry = {k: v for k, v in record.items() if k != "type"}
+            self._history.setdefault(source_name, deque(maxlen=history_size)).append(entry)
 
     def check(self, source_name: str, check_fn) -> dict:
         start = time.monotonic()
@@ -101,6 +173,7 @@ class HealthMonitor:
 
         with self._lock:
             self._history.setdefault(source_name, deque(maxlen=self._history_size)).append(result)
+        _append_to_history_file({**result, "type": "health_check"})
         return result
 
     def uptime(self, source_name: str) -> float | None:

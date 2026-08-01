@@ -15,7 +15,7 @@ BASE_URL = "https://api.binance.com"
 # Crypto.com/Bybit) -- kein Mapping noetig, nur eine Whitelist zur Absicherung.
 SUPPORTED_INTERVALS = {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"}
 
-binance_limiter = RateLimiter(max_calls=15, per_seconds=1.0)
+binance_limiter = RateLimiter(max_calls=10, per_seconds=1.0)  # Doku: 6000 Weight/Min, Klines-Weight klein -> 10/s deutlich konservativ
 
 
 @ttl_cache(seconds=30)

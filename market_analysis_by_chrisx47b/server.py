@@ -40,17 +40,60 @@ DISCLAIMER = "Rein informativ/technisch, keine Anlageberatung."
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def candles(symbol: str, source: str = "crypto", timeframe: str = "1h", count: int = 100, category: str = "spot") -> dict:
-    """OHLCV-Kerzen. source: crypto/binance/bybit/mt5. category nur fuer bybit (spot/linear/inverse)."""
-    df = source_router.get_candles(source, symbol, timeframe, count, category=category)
-    return {"symbol": symbol, "source": source, "timeframe": timeframe,
-            "candles": df.reset_index().to_dict("records")}
+def candles(symbol: str, source: str = "crypto", timeframe: str = "1h", count: int = 100,
+            category: str = "spot", fallback_sources: list[dict] | None = None) -> dict:
+    """OHLCV-Kerzen. source: crypto/binance/bybit/mt5/kucoin/kraken/bitfinex/coingecko/yahoo.
+    category nur fuer bybit (spot/linear/inverse).
+
+    fallback_sources: optionale Liste [{"source": "...", "symbol": "..."}] --
+    wird nacheinander versucht, falls die primaere Quelle fehlschlaegt (Timeout,
+    Ausfall, unbekanntes Symbol). WICHTIG: Symbol-Format ist je Quelle
+    unterschiedlich (z.B. 'BTC_USDT' vs. 'BTCUSDT' vs. 'XBTUSD') -- pro
+    Fallback-Eintrag am besten das passende Symbol explizit angeben, sonst
+    wird das Symbol der Primaerquelle uebernommen und schlaegt bei
+    inkompatiblen Formaten (z.B. Kraken) einfach fehl und faellt weiter durch.
+    """
+    attempts = [{"source": source, "symbol": symbol}] + (fallback_sources or [])
+    errors = {}
+    for attempt in attempts:
+        src, sym = attempt["source"], attempt.get("symbol", symbol)
+        try:
+            df = source_router.get_candles(src, sym, timeframe, count, category=category)
+            result = {"symbol": sym, "source_used": src, "timeframe": timeframe,
+                      "candles": df.reset_index().to_dict("records")}
+            if errors:
+                result["fallback_used"] = True
+                result["failed_sources"] = errors
+            return result
+        except Exception as e:
+            errors[src] = str(e)
+    raise RuntimeError(f"Alle Quellen fehlgeschlagen: {errors}")
 
 
 @mcp.tool()
-def ticker(symbol: str, source: str = "crypto", category: str = "spot") -> dict:
-    """Aktueller Preis/24h-Change/Volumen. source: crypto/binance/bybit (nicht mt5 -> mt5_account_info nutzen)."""
-    return source_router.get_ticker(source, symbol, category=category)
+def ticker(symbol: str, source: str = "crypto", category: str = "spot",
+           fallback_sources: list[dict] | None = None) -> dict:
+    """Aktueller Preis/24h-Change/Volumen. source: crypto/binance/bybit/kucoin/kraken/bitfinex/coingecko/yahoo
+    (nicht mt5 -> mt5_account_info nutzen).
+
+    fallback_sources: siehe candles() -- gleiches Prinzip, gleicher Symbol-Format-Hinweis.
+    """
+    attempts = [{"source": source, "symbol": symbol}] + (fallback_sources or [])
+    errors = {}
+    for attempt in attempts:
+        src, sym = attempt["source"], attempt.get("symbol", symbol)
+        try:
+            result = source_router.get_ticker(src, sym, category=category)
+            if isinstance(result, dict):
+                result = dict(result)
+                result["_source_used"] = src
+                if errors:
+                    result["_fallback_used"] = True
+                    result["_failed_sources"] = errors
+            return result
+        except Exception as e:
+            errors[src] = str(e)
+    raise RuntimeError(f"Alle Quellen fehlgeschlagen: {errors}")
 
 
 @mcp.tool()

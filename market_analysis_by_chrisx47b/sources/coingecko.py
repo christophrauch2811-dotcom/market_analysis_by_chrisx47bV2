@@ -24,7 +24,7 @@ from ..cache import ttl_cache, RateLimiter, retry_with_backoff
 BASE_URL = "https://api.coingecko.com/api/v3"
 API_KEY = os.environ.get("COINGECKO_API_KEY", "").strip()
 
-coingecko_limiter = RateLimiter(max_calls=5, per_seconds=1.0)
+coingecko_limiter = RateLimiter(max_calls=25, per_seconds=60.0)  # Doku: 30 Calls/Minute im Demo-Plan, 25 als Sicherheitsabstand
 
 # Grobe Faustregel: wie viele Tage Historie fuer count Kerzen bei timeframe anfragen,
 # damit CoinGeckos automatische Granularitaet ungefaehr passt.

@@ -118,6 +118,15 @@ Tokens (-38%). Beim Ergänzen neuer Tools:
 - Caching (`cache.py`) spart **keine** Claude-Tokens, nur Latenz/API-Last --
   nicht mit Token-Ersparnis verwechseln.
 
+## Release-Prozess
+
+Bei jeder Aenderung, die mehr als einen kleinen Bugfix darstellt:
+1. `CHANGELOG.md` ergaenzen (Hinzugefuegt/Geaendert/Entfernt/Behoben, siehe bestehende Eintraege als Vorlage).
+2. Version in `pyproject.toml` anheben (`version = "X.Y.Z"`) -- Semantic Versioning,
+   solange < 1.0.0 sind Breaking Changes auch in Minor-Releases ok.
+3. Nach dem Commit: `git tag vX.Y.Z && git push --tags` (lokal taggen, Push ist Sache des Nutzers).
+4. pytest-Suite MUSS vor jedem Release grün sein (`pytest -v`, siehe "Testen" oben).
+
 ## Sonstige Konventionen
 
 - Neue Datenquellen-Anbindungen (Endpunkt-URL, Feldnamen, Sortierreihenfolge)

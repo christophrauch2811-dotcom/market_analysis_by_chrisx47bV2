@@ -22,7 +22,7 @@ TIMEFRAME_MAP = {
     "1d": "1D", "1w": "7D", "1M": "1M",
 }
 
-bitfinex_limiter = RateLimiter(max_calls=10, per_seconds=1.0)
+bitfinex_limiter = RateLimiter(max_calls=15, per_seconds=60.0)  # Doku: 10-90 Requests/Minute je Endpunkt, konservatives unteres Ende gewaehlt
 
 
 def _ensure_prefix(symbol: str) -> str:

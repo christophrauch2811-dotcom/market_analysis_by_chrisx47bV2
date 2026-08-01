@@ -29,7 +29,7 @@ _RANGE_FOR_COUNT = {
     "1h": "3mo", "1d": "2y", "1w": "5y", "1M": "10y",
 }
 
-yahoo_limiter = RateLimiter(max_calls=10, per_seconds=1.0)
+yahoo_limiter = RateLimiter(max_calls=1, per_seconds=1.0)  # inoffizielle API, kein dokumentiertes Limit -- sehr konservativ wegen Throttling-Risiko
 
 
 @retry_with_backoff(max_attempts=3, base_delay=1.0)

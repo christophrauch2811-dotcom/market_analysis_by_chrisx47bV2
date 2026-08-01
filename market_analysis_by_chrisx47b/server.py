@@ -1,21 +1,16 @@
 """
 Market Analysis by chrisx47b
 =============================
-Stellt Claude Code (oder jedem anderen MCP-Client) Marktdaten und eine breite
-Analyse-Bibliothek aus fuenf Quellen bereit:
+Marktdaten + Analyse fuer Claude Code aus 5 Quellen: Crypto.com, Binance,
+Bybit (alle oeffentlich, kein Key), TradingView (inoffiziell), MetaTrader5
+(nur lokal/Windows). Reiner Lese-/Analyse-Connector -- kein Backtesting,
+keine Order-Ausfuehrung, keine Anlageberatung.
 
-  - Crypto.com  (oeffentliche REST-API, kein Key noetig)
-  - Binance     (oeffentliche REST-API, kein Key noetig)
-  - Bybit       (oeffentliche v5 REST-API, kein Key noetig)
-  - TradingView (inoffizielle technische Analyse-Zusammenfassung)
-  - MetaTrader5 (nur lokal auf Windows mit laufendem Terminal)
+Kosten-Hinweis: Tool-Docstrings sind bewusst kurz gehalten (jede Zeile hier
+wird bei JEDER Nachricht in Claude Code mitgeschickt, nicht nur bei Nutzung).
+Ausfuehrliche Begruendungen/Verifikations-Notizen stehen im README, nicht hier.
 
-Reiner Lese-/Analyse-Connector. Keine Order-Ausfuehrung, kein Backtesting,
-keine Monte-Carlo-Simulation (bewusst nicht Teil dieses Connectors).
-Keine Anlageberatung -- alle Ausgaben sind rein informativ/technisch.
-
-Start:
-    python server.py
+Start: python server.py
 """
 
 from mcp.server.fastmcp import FastMCP
@@ -23,7 +18,6 @@ import pandas as pd
 
 from .sources import crypto_com, tradingview, mt5_source, binance, bybit
 from . import source_router
-from .indicators import compute_all_indicators, fibonacci_retracement, latest_snapshot
 from .rl_features import build_feature_vector, build_model_feature_vector, FEATURE_SCHEMA_VERSION, feature_schema_hash
 from .regime import detect_regime
 from .extended_indicators import compute_extended_indicators
@@ -38,131 +32,40 @@ from .export import export_ohlcv_csv, export_text_file
 
 mcp = FastMCP("market-analysis-by-chrisx47b")
 
-DISCLAIMER = (
-    "Hinweis: Diese Daten sind rein informativ/technischer Natur und stellen "
-    "keine Anlageberatung dar."
-)
+DISCLAIMER = "Rein informativ/technisch, keine Anlageberatung."
 
 
 # ---------------------------------------------------------------------------
-# Crypto.com Tools
+# Generische Markt-Tools (crypto/binance/bybit/mt5 -- ein Tool statt vier je Aufgabe)
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def crypto_candles(symbol: str, timeframe: str = "1h", count: int = 200) -> dict:
-    """Holt OHLCV-Kerzen von Crypto.com.
-
-    symbol: z.B. 'BTC_USDT', 'ETH_USDT'
-    timeframe: 1m,5m,15m,30m,1h,4h,1d,1w,1M
-    """
-    df = crypto_com.get_candlestick(symbol, timeframe, count)
-    return {"symbol": symbol, "timeframe": timeframe, "candles": df.reset_index().to_dict("records")}
-
-
-@mcp.tool()
-def crypto_ticker(symbol: str) -> dict:
-    """Aktueller Ticker (Preis, 24h-Change, Volumen) von Crypto.com."""
-    return crypto_com.get_ticker(symbol)
-
-
-@mcp.tool()
-def crypto_order_book(symbol: str, depth: int = 10) -> dict:
-    """Orderbuch (Bids/Asks) von Crypto.com."""
-    return crypto_com.get_order_book(symbol, depth)
-
-
-@mcp.tool()
-def crypto_indicators(symbol: str, timeframe: str = "1h", count: int = 200) -> dict:
-    """Holt Crypto.com-Kerzen und berechnet den vollen Indikator-Satz
-    (Trend, Momentum, Volatilitaet, Volumen) plus Fibonacci-Retracement.
-    """
-    df = crypto_com.get_candlestick(symbol, timeframe, count)
-    snapshot = latest_snapshot(df)
-    fib = fibonacci_retracement(df)
-    return {"symbol": symbol, "timeframe": timeframe, "indicators": snapshot,
-            "fibonacci": fib, "disclaimer": DISCLAIMER}
-
-
-# ---------------------------------------------------------------------------
-# Binance Tools
-# ---------------------------------------------------------------------------
-
-@mcp.tool()
-def binance_candles(symbol: str, timeframe: str = "1h", count: int = 200) -> dict:
-    """Holt OHLCV-Kerzen von Binance. symbol z.B. 'BTCUSDT' (kein Unterstrich)."""
-    df = binance.get_candlestick(symbol, timeframe, count)
-    return {"symbol": symbol, "timeframe": timeframe, "candles": df.reset_index().to_dict("records")}
-
-
-@mcp.tool()
-def binance_ticker(symbol: str) -> dict:
-    """24h-Ticker (Preis, Change, Volumen) von Binance."""
-    return binance.get_ticker(symbol)
-
-
-@mcp.tool()
-def binance_order_book(symbol: str, depth: int = 100) -> dict:
-    """Orderbuch (Bids/Asks) von Binance."""
-    return binance.get_order_book(symbol, depth)
-
-
-@mcp.tool()
-def binance_indicators(symbol: str, timeframe: str = "1h", count: int = 200) -> dict:
-    """Holt Binance-Kerzen und berechnet den vollen Indikator-Satz + Fibonacci."""
-    df = binance.get_candlestick(symbol, timeframe, count)
-    snapshot = latest_snapshot(df)
-    fib = fibonacci_retracement(df)
-    return {"symbol": symbol, "timeframe": timeframe, "indicators": snapshot,
-            "fibonacci": fib, "disclaimer": DISCLAIMER}
-
-
-# ---------------------------------------------------------------------------
-# Bybit Tools
-# ---------------------------------------------------------------------------
-
-@mcp.tool()
-def bybit_candles(symbol: str, timeframe: str = "1h", count: int = 200, category: str = "spot") -> dict:
-    """Holt OHLCV-Kerzen von Bybit. category: 'spot', 'linear' (USDT-Perpetuals), 'inverse'."""
-    df = bybit.get_candlestick(symbol, timeframe, count, category=category)
-    return {"symbol": symbol, "timeframe": timeframe, "category": category,
+def candles(symbol: str, source: str = "crypto", timeframe: str = "1h", count: int = 100, category: str = "spot") -> dict:
+    """OHLCV-Kerzen. source: crypto/binance/bybit/mt5. category nur fuer bybit (spot/linear/inverse)."""
+    df = source_router.get_candles(source, symbol, timeframe, count, category=category)
+    return {"symbol": symbol, "source": source, "timeframe": timeframe,
             "candles": df.reset_index().to_dict("records")}
 
 
 @mcp.tool()
-def bybit_ticker(symbol: str, category: str = "spot") -> dict:
-    """Ticker von Bybit."""
-    return bybit.get_ticker(symbol, category=category)
+def ticker(symbol: str, source: str = "crypto", category: str = "spot") -> dict:
+    """Aktueller Preis/24h-Change/Volumen. source: crypto/binance/bybit (nicht mt5 -> mt5_account_info nutzen)."""
+    return source_router.get_ticker(source, symbol, category=category)
 
 
 @mcp.tool()
-def bybit_order_book(symbol: str, depth: int = 50, category: str = "spot") -> dict:
-    """Orderbuch (Bids/Asks) von Bybit."""
-    return bybit.get_order_book(symbol, depth, category=category)
-
-
-@mcp.tool()
-def bybit_indicators(symbol: str, timeframe: str = "1h", count: int = 200, category: str = "spot") -> dict:
-    """Holt Bybit-Kerzen und berechnet den vollen Indikator-Satz + Fibonacci."""
-    df = bybit.get_candlestick(symbol, timeframe, count, category=category)
-    snapshot = latest_snapshot(df)
-    fib = fibonacci_retracement(df)
-    return {"symbol": symbol, "timeframe": timeframe, "indicators": snapshot,
-            "fibonacci": fib, "disclaimer": DISCLAIMER}
+def order_book(symbol: str, source: str = "crypto", depth: int = 50, category: str = "spot") -> dict:
+    """Orderbuch (Bids/Asks). source: crypto/binance/bybit (nicht mt5)."""
+    return source_router.get_order_book(source, symbol, depth, category=category)
 
 
 # ---------------------------------------------------------------------------
-# TradingView Tools
+# TradingView
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
 def tradingview_summary(symbol: str, exchange: str, screener: str, interval: str = "1h") -> dict:
-    """Technische Analyse-Zusammenfassung von TradingView (inoffiziell).
-
-    symbol: z.B. 'BTCUSDT', 'XAUUSD', 'EURUSD'
-    exchange: z.B. 'BINANCE', 'OANDA', 'FX_IDC'
-    screener: 'crypto', 'forex', 'america', 'cfd'
-    interval: 1m,5m,15m,1h,4h,1d,1w
-    """
+    """TradingView-TA-Rating (inoffiziell). exchange z.B. BINANCE/OANDA. screener: crypto/forex/america/cfd."""
     result = tradingview.get_technical_summary(symbol, exchange, screener, interval)
     result["disclaimer"] = DISCLAIMER
     return result
@@ -171,32 +74,16 @@ def tradingview_summary(symbol: str, exchange: str, screener: str, interval: str
 @mcp.tool()
 def create_pinescript_indicator(name: str, components: list[str], overlay: bool = False,
                                  save_to_file: bool = True, output_path: str | None = None) -> dict:
-    """Erstellt ein Pine-Script-v6-Indikator-Skript zum Einfuegen in TradingViews
-    Pine-Editor. components kombiniert beliebig viele der folgenden Bausteine
-    (auch mehrfach, z.B. ['ema','ema'] fuer zwei EMAs mit unterschiedlicher Laenge):
-    sma, ema, rsi, macd, bollinger, atr, supertrend, vwap, adx, stochastic.
-
-    overlay: True legt das Skript standardmaessig auf das Preischart, False
-    (Standard) gibt Oszillatoren ein eigenes Panel und zeigt MA/Bollinger/
-    Supertrend/VWAP trotzdem via force_overlay auf dem Chart.
-
-    save_to_file: Standardmaessig True -- speichert den Code zusaetzlich als
-    .txt-Datei lokal (dieser Server laeuft auf deinem Rechner, die Datei
-    landet direkt auf deiner Festplatte, kein Upload/Download-Umweg). Ohne
-    eigenen output_path wird automatisch ein Dateiname aus Name/Zeitstempel
-    im aktuellen Arbeitsverzeichnis erzeugt.
-
-    WICHTIG: Der Code wurde NICHT compiliert (kein Pine-Compiler verfuegbar) --
-    bitte im TradingView Pine-Editor pruefen, bevor du ihn nutzt.
+    """Pine-Script-v6-Indikator (sma/ema/rsi/macd/bollinger/atr/supertrend/vwap/adx/stochastic, kombinierbar).
+    NICHT compiliert -- im TradingView Pine-Editor pruefen. save_to_file speichert zusaetzlich als .txt lokal.
     """
     code = pine_generator.generate_pine_indicator(name, components, overlay=overlay)
     result = {
         "name": name, "components": components, "pine_script": code,
-        "warning": "Nicht compiliert -- bitte im TradingView Pine-Editor verifizieren.",
+        "warning": "Nicht compiliert -- im TradingView Pine-Editor verifizieren.",
     }
     if save_to_file:
-        file_info = export_text_file(code, filepath=output_path, base_name=name.replace(" ", "_"), extension="txt")
-        result["file"] = file_info
+        result["file"] = export_text_file(code, filepath=output_path, base_name=name.replace(" ", "_"), extension="txt")
     return result
 
 
@@ -206,21 +93,9 @@ def create_pinescript_strategy(name: str, entry_method: str = "ema_cross", direc
                                 take_profit_pct: float = 4.0, atr_stop_mult: float = 2.0,
                                 atr_take_profit_mult: float = 4.0, atr_length: int = 14,
                                 save_to_file: bool = True, output_path: str | None = None) -> dict:
-    """Erstellt ein Pine-Script-v6-Strategie-Skript (strategy.entry/strategy.exit)
-    zum Einfuegen in TradingViews Pine-Editor -- lauffaehig in TradingViews
-    eigenem Strategy Tester. Dieser Connector backtestet bewusst nicht selbst
-    (siehe fruehere Entscheidung); das hier delegiert stattdessen an
-    TradingViews eigene Backtesting-Infrastruktur.
-
-    entry_method: 'ema_cross', 'rsi_reversion', 'supertrend_flip', 'breakout_donchian'
-    direction: 'long_only', 'short_only', 'both'
-    exit_method: 'percent' (stop_loss_pct/take_profit_pct) oder 'atr' (atr_stop_mult/atr_take_profit_mult)
-
-    save_to_file: Standardmaessig True -- speichert den Code zusaetzlich als
-    .txt-Datei lokal auf deiner Festplatte (siehe create_pinescript_indicator).
-
-    WICHTIG: Der Code wurde NICHT compiliert (kein Pine-Compiler verfuegbar) --
-    bitte im TradingView Pine-Editor pruefen/backtesten, bevor du ihn nutzt.
+    """Pine-Script-v6-Strategie (entry_method: ema_cross/rsi_reversion/supertrend_flip/breakout_donchian;
+    exit_method: percent/atr). Laeuft in TradingViews eigenem Strategy Tester (dieser Connector backtestet
+    selbst nicht). NICHT compiliert -- im Pine-Editor pruefen. save_to_file speichert zusaetzlich als .txt.
     """
     code = pine_generator.generate_pine_strategy(
         name, entry_method=entry_method, direction=direction, exit_method=exit_method,
@@ -230,40 +105,20 @@ def create_pinescript_strategy(name: str, entry_method: str = "ema_cross", direc
     result = {
         "name": name, "entry_method": entry_method, "direction": direction,
         "exit_method": exit_method, "pine_script": code,
-        "warning": "Nicht compiliert -- bitte im TradingView Pine-Editor verifizieren/backtesten.",
+        "warning": "Nicht compiliert -- im TradingView Pine-Editor verifizieren/backtesten.",
     }
     if save_to_file:
-        file_info = export_text_file(code, filepath=output_path, base_name=name.replace(" ", "_"), extension="txt")
-        result["file"] = file_info
+        result["file"] = export_text_file(code, filepath=output_path, base_name=name.replace(" ", "_"), extension="txt")
     return result
 
 
 # ---------------------------------------------------------------------------
-# MetaTrader5 Tools (nur lokal auf Windows nutzbar)
+# MetaTrader5 (nur lokal auf Windows nutzbar -- keine ticker/order_book-Analogie)
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def mt5_candles(symbol: str, timeframe: str = "1h", count: int = 200) -> dict:
-    """Holt OHLCV-Kerzen aus dem lokal laufenden MT5-Terminal.
-    Funktioniert nur, wenn dieser Server auf Windows mit installiertem/eingeloggtem MT5 laeuft.
-    """
-    df = mt5_source.get_ohlcv(symbol, timeframe, count)
-    return {"symbol": symbol, "timeframe": timeframe, "candles": df.reset_index().to_dict("records")}
-
-
-@mcp.tool()
-def mt5_indicators(symbol: str, timeframe: str = "1h", count: int = 200) -> dict:
-    """Holt MT5-Kerzen und berechnet den vollen Indikator-Satz + Fibonacci."""
-    df = mt5_source.get_ohlcv(symbol, timeframe, count)
-    snapshot = latest_snapshot(df)
-    fib = fibonacci_retracement(df)
-    return {"symbol": symbol, "timeframe": timeframe, "indicators": snapshot,
-            "fibonacci": fib, "disclaimer": DISCLAIMER}
-
-
-@mcp.tool()
 def mt5_account_info() -> dict:
-    """Kontoinformationen (Guthaben, Equity, Margin) aus MT5."""
+    """Kontostand/Equity/Margin aus MT5."""
     return mt5_source.get_account_info()
 
 
@@ -275,36 +130,21 @@ def mt5_open_positions() -> list:
 
 @mcp.tool()
 def mt5_max_history(symbol: str, timeframe: str = "1h", years_back: float = 6.0, chunk_days: int = 180) -> dict:
-    """Holt so viel historische MT5-Kerzen wie Broker/Terminal fuer `symbol`
-    vorhalten, bis zurueck zu `years_back` Jahren (Ziel: 5-6+ Jahre). Wird in
-    Chunks abgerufen, da einzelne Mehrjahresabfragen je nach Terminal/Broker
-    gekappt werden koennen. Gibt NUR Metadaten zurueck (Zeilenzahl, tatsaechliche
-    Datumsspanne) -- fuer die vollen Kerzen: mt5_download_csv.
-
-    Wie viel Historie tatsaechlich verfuegbar ist, haengt vom Broker ab --
-    das kann bei M1 deutlich weniger als 6 Jahre sein, bei H1/D1 oft mehr.
-    """
+    """Holt so viel MT5-Historie wie der Broker vorhaelt (Ziel: years_back Jahre). Nur Metadaten -- volle Kerzen: mt5_download_csv."""
     df = mt5_source.get_max_history(symbol, timeframe, years_back, chunk_days)
     span_years = round((df.index.max() - df.index.min()).days / 365.25, 2)
     return {
         "symbol": symbol, "timeframe": timeframe, "requested_years": years_back,
         "row_count": len(df), "date_range": (str(df.index.min()), str(df.index.max())),
         "actual_years_covered": span_years,
-        "note": ("Weniger Jahre als angefragt bedeutet, dass der Broker fuer dieses "
-                 "Symbol/Timeframe nicht mehr Historie vorhaelt, nicht notwendigerweise einen Fehler."),
+        "note": "Weniger Jahre als angefragt = Broker haelt nicht mehr vor, kein Fehler.",
     }
 
 
 @mcp.tool()
 def mt5_download_csv(symbol: str, timeframe: str = "1h", years_back: float = 6.0,
                       chunk_days: int = 180, output_path: str | None = None) -> dict:
-    """Holt die maximal verfuegbare MT5-Historie (Ziel: `years_back` Jahre)
-    und speichert sie als CSV. Da dieser Server nur lokal mit einem laufenden
-    MT5-Terminal funktioniert, landet die Datei direkt auf deiner Festplatte --
-    kein Upload/Download-Schritt noetig. Ohne `output_path` wird automatisch
-    ein Dateiname (Symbol_Timeframe_Zeitstempel.csv) im aktuellen
-    Arbeitsverzeichnis des Server-Prozesses erzeugt.
-    """
+    """Holt maximal verfuegbare MT5-Historie und speichert als CSV lokal (Server laeuft auf deinem Rechner)."""
     df = mt5_source.get_max_history(symbol, timeframe, years_back, chunk_days)
     result = export_ohlcv_csv(df, filepath=output_path, symbol=symbol, timeframe=timeframe)
     result["symbol"] = symbol
@@ -314,16 +154,12 @@ def mt5_download_csv(symbol: str, timeframe: str = "1h", years_back: float = 6.0
 
 
 # ---------------------------------------------------------------------------
-# Regime-/Trenderkennung (quellenunabhaengig, fuer alle zukuenftigen Connectoren nutzbar)
+# Regime & erweiterte Indikatoren
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
 def market_regime(symbol: str, source: str = "crypto", timeframe: str = "1h", count: int = 300) -> dict:
-    """Klassifiziert das aktuelle Marktregime: Trendrichtung/-staerke (ADX,
-    lineare Regression, MA-Alignment), Marktstruktur (HH/HL vs. LH/LL),
-    Trending- vs. Mean-Reverting-Charakter (Hurst, Choppiness Index) und
-    Volatilitaetsregime (inkl. Bollinger-Squeeze).
-    """
+    """Marktregime: Trendrichtung/-staerke, Marktstruktur (HH/HL vs LH/LL), Trending- vs. Mean-Reverting, Volatilitaetsregime."""
     df = source_router.get_candles(source, symbol, timeframe, count)
     regime = detect_regime(df)
     regime["disclaimer"] = DISCLAIMER
@@ -331,53 +167,42 @@ def market_regime(symbol: str, source: str = "crypto", timeframe: str = "1h", co
 
 
 @mcp.tool()
-def extended_indicators(symbol: str, source: str = "crypto", timeframe: str = "1h", count: int = 200) -> dict:
-    """Erweiterte Indikatoren, die im urspruenglichen Satz fehlten (Abgleich
-    gegen TradingViews eingebaute Indikatoren-Liste): Supertrend, TRIX, KST,
-    DPO, Vortex, PPO/PVO, Stochastic RSI, Hull MA, VWMA, Chande Momentum
-    Oscillator, Chaikin Oscillator, Williams Alligator, Fisher Transform,
-    Connors RSI, ADL, Ease of Movement, NVI, PVT, Mass Index.
-    """
+def extended_indicators(symbol: str, source: str = "crypto", timeframe: str = "1h",
+                         count: int = 200, fields: list[str] | None = None) -> dict:
+    """39 Indikatoren (Supertrend/TRIX/KST/DPO/Vortex/PPO/PVO/StochRSI/Hull MA/VWMA/CMO/Chaikin Osc/
+    Alligator/Fisher Transform/Connors RSI/ADL/EOM/NVI/PVT/Mass Index). fields: nur diese Keys zurueckgeben
+    (spart Tokens bei gezielten Fragen statt aller 39)."""
     df = source_router.get_candles(source, symbol, timeframe, count)
     result = compute_extended_indicators(df)
+    if fields:
+        result = {k: result[k] for k in fields if k in result}
     return {"symbol": symbol, "source": source, "timeframe": timeframe,
             "indicators": result, "disclaimer": DISCLAIMER}
 
 
 # ---------------------------------------------------------------------------
-# RL-Feature-Vektor (100+ Features fuer Reinforcement-Learning-Agenten)
+# RL-Feature-Vektor
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
 def rl_feature_vector(symbol: str, source: str = "crypto", timeframe: str = "1h",
                        count: int = 300, position_state: dict | None = None,
-                       mode: str = "model", expected_freq: str | None = None) -> dict:
-    """Baut den RL-State-Vektor (Trend, Momentum, Volatilitaet, Volumen,
-    Breakout, Pivots, Fibonacci, Candlestick-Patterns, Stop-Loss-Distanzen,
-    Session-/Zeit-Features, Statistik, Regime, optionaler Positions-State).
-
-    Prueft die Rohdaten vorher auf Qualitaetsprobleme (Luecken, Duplikate,
-    unplausible Spruenge) -- bei Problemen wird 'data_quality' im Ergebnis
-    gefuellt, die Berechnung laeuft trotzdem weiter (Warnung, kein Abbruch).
-
-    source: 'crypto' (Crypto.com), 'binance', 'bybit' oder 'mt5' (MetaTrader5, nur lokal/Windows)
-    mode: 'model' (Standard) liefert nur skaleninvariante Features -- das
-        gehoert in den RL-Observation-Space. 'raw' liefert zusaetzlich
-        absolute Preisniveaus (sma_20, pivot_point etc.) fuer Menschen/Debugging.
-    expected_freq: optionale pandas-Frequenz (z.B. '1h') fuer die Luecken-Pruefung.
-    position_state: optionales dict mit side/entry_price/current_price/bars_held/
-        stop_loss/take_profit/peak_equity/current_equity/consecutive_wins/losses
-        -- falls der RL-Agent aktuell eine Position haelt.
+                       mode: str = "model", expected_freq: str | None = None,
+                       fields: list[str] | None = None) -> dict:
+    """RL-State-Vektor (Trend/Momentum/Volatilitaet/Volumen/Breakout/Pivots/Fibonacci/Candlestick/
+    Stop-Loss-Distanzen/Session/Statistik/Regime/erweiterte Indikatoren/Positions-State).
+    mode='model' (Standard, 183 skaleninvariante Features) oder 'raw' (249, inkl. absoluter Preise).
+    fields: nur diese Keys zurueckgeben -- bei gezielten Fragen (z.B. nur RSI) deutlich guenstiger als der volle Vektor.
+    source: crypto/binance/bybit/mt5. Fuer einfache Fragen lieber ticker()/market_regime()/extended_indicators() nutzen.
     """
     df = source_router.get_candles(source, symbol, timeframe, count)
 
     quality = validate_ohlcv(df, expected_freq=expected_freq)
     alert_on_data_quality(quality, source, symbol)
 
-    if mode == "raw":
-        features = build_feature_vector(df, position_state)
-    else:
-        features = build_model_feature_vector(df, position_state)
+    features = build_feature_vector(df, position_state) if mode == "raw" else build_model_feature_vector(df, position_state)
+    if fields:
+        features = {k: features[k] for k in fields if k in features}
 
     return {
         "symbol": symbol, "source": source, "timeframe": timeframe, "mode": mode,
@@ -391,10 +216,7 @@ def rl_feature_vector(symbol: str, source: str = "crypto", timeframe: str = "1h"
 @mcp.tool()
 def rl_core_feature_vector(symbol: str, source: str = "crypto", timeframe: str = "1h",
                             count: int = 300, position_state: dict | None = None) -> dict:
-    """Wie rl_feature_vector (mode='model'), aber auf ein handkuratiertes
-    Core-Set von ~45 Features reduziert (weniger redundant, z.B. nur RSI-14
-    statt RSI-7/14/21). Sinnvoll als schlankerer Startpunkt fuer erstes Training.
-    """
+    """Wie rl_feature_vector (mode='model'), aber auf 61 handkuratierte Features reduziert -- schlankerer Standard-Einstieg."""
     df = source_router.get_candles(source, symbol, timeframe, count)
     full = build_model_feature_vector(df, position_state)
     core = build_core_feature_vector(full)
@@ -408,10 +230,7 @@ def rl_core_feature_vector(symbol: str, source: str = "crypto", timeframe: str =
 @mcp.tool()
 def check_data_quality(symbol: str, source: str = "crypto", timeframe: str = "1h",
                         count: int = 300, expected_freq: str | None = None) -> dict:
-    """Prueft OHLCV-Rohdaten auf Luecken, Duplikate, OHLC-Inkonsistenzen und
-    unplausible Preisspruenge -- ohne Features zu berechnen. Sinnvoll als
-    eigenstaendiger Check vor einem RL-Trainingslauf ueber lange Historien.
-    """
+    """Prueft OHLCV auf Luecken/Duplikate/OHLC-Inkonsistenzen/Preisspruenge, ohne Features zu berechnen."""
     df = source_router.get_candles(source, symbol, timeframe, count)
     result = validate_ohlcv(df, expected_freq=expected_freq)
     alert_on_data_quality(result, source, symbol)
@@ -424,8 +243,8 @@ def check_data_quality(symbol: str, source: str = "crypto", timeframe: str = "1h
 
 @mcp.tool()
 def list_rl_feature_categories() -> dict:
-    """Zeigt, wie viele Features rl_feature_vector je Kategorie liefert."""
-    import pandas as pd, numpy as np
+    """Feature-Anzahl je Kategorie (raw/model/core)."""
+    import numpy as np
     from . import rl_features as rf
     n = 300
     idx = pd.date_range("2024-01-01", periods=n, freq="h")
@@ -433,21 +252,14 @@ def list_rl_feature_categories() -> dict:
     df = pd.DataFrame({"open": price, "high": price + 1, "low": price - 1,
                         "close": price, "volume": np.random.randint(100, 1000, n)}, index=idx)
     categories = {
-        "preis_returns": rf._price_features(df),
-        "trend_ma": rf._trend_features(df),
-        "momentum": rf._momentum_features(df),
-        "volatilitaet": rf._volatility_features(df),
-        "volumen": rf._volume_features(df),
-        "breakout": rf._breakout_features(df),
-        "pivots": rf._pivot_features(df),
-        "fibonacci": rf._fibonacci_features(df),
-        "candlestick": rf._candlestick_features(df),
-        "stop_loss_risiko": rf._risk_features(df),
-        "session_zeit": rf._session_features(df),
-        "statistik": rf._statistical_features(df),
+        "preis_returns": rf._price_features(df), "trend_ma": rf._trend_features(df),
+        "momentum": rf._momentum_features(df), "volatilitaet": rf._volatility_features(df),
+        "volumen": rf._volume_features(df), "breakout": rf._breakout_features(df),
+        "pivots": rf._pivot_features(df), "fibonacci": rf._fibonacci_features(df),
+        "candlestick": rf._candlestick_features(df), "stop_loss_risiko": rf._risk_features(df),
+        "session_zeit": rf._session_features(df), "statistik": rf._statistical_features(df),
         "erweiterte_indikatoren": rf._extended_indicator_features(df),
-        "regime_trend": rf._regime_features(df),
-        "positions_state": rf._position_state_features(None),
+        "regime_trend": rf._regime_features(df), "positions_state": rf._position_state_features(None),
     }
     result = {k: len(v) for k, v in categories.items()}
     result["gesamt_raw"] = sum(len(v) for v in categories.values())
@@ -459,34 +271,13 @@ def list_rl_feature_categories() -> dict:
 @mcp.tool()
 def analyze_feature_correlation(symbol: str, source: str = "crypto", timeframe: str = "1h",
                                  history_points: int = 200, threshold: float = 0.95) -> dict:
-    """Berechnet den Modell-Feature-Vektor an `history_points` aufeinanderfolgenden
-    Zeitpunkten und findet Feature-Paare, die staerker als `threshold` korrelieren
-    -- Basis fuer eine gezielte Reduktion des 210-Feature-Sets. Rechenintensiv
-    (ein Feature-Vektor pro Zeitpunkt), daher Default bewusst klein gehalten.
-    """
+    """Findet stark korrelierte Feature-Paare ueber echte Historie (rechenintensiv, Default bewusst klein)."""
     df = source_router.get_candles(source, symbol, timeframe, 210 + history_points)
-
-    rows = []
-    for i in range(210, len(df)):
-        window = df.iloc[max(0, i - 210):i + 1]
-        rows.append(build_model_feature_vector(window))
+    rows = [build_model_feature_vector(df.iloc[max(0, i - 210):i + 1]) for i in range(210, len(df))]
     history_df = pd.DataFrame(rows, index=df.index[210:])
     report = correlation_report(history_df, threshold=threshold)
     report["disclaimer"] = DISCLAIMER
     return report
-
-
-@mcp.tool()
-def list_available_indicators() -> list:
-    """Listet alle Indikatoren, die crypto_indicators / mt5_indicators berechnen."""
-    return [
-        "sma_20", "sma_50", "sma_200", "ema_12", "ema_26",
-        "macd", "macd_signal", "macd_diff", "adx", "cci",
-        "ichimoku_a", "ichimoku_b", "psar",
-        "rsi_14", "stoch_k", "stoch_d", "williams_r", "roc",
-        "bb_high", "bb_low", "bb_mid", "atr", "keltner_high", "keltner_low",
-        "obv", "vwap", "mfi", "fibonacci_retracement",
-    ]
 
 
 # ---------------------------------------------------------------------------
@@ -495,38 +286,26 @@ def list_available_indicators() -> list:
 
 @mcp.tool()
 def check_connector_health() -> dict:
-    """Pingt jede konfigurierte Quelle mit einer leichten Anfrage an (Ticker
-    fuer BTC/BTCUSDT) und misst Latenz/Erfolg. Ergebnisse landen zusaetzlich
-    in der Health-Historie (siehe get_source_uptime). MT5 wird nur auf
-    Verfuegbarkeit des Pakets geprueft, nicht auf eine echte Verbindung
-    (das braeuchte ein lokal laufendes Windows-Terminal).
-    """
+    """Pingt Crypto.com/Binance/Bybit (Ticker), misst Latenz, meldet Alerts bei Fehlern."""
     results = {
         "crypto_com": health_monitor.check("crypto_com", lambda: crypto_com.get_ticker("BTC_USDT")),
         "binance": health_monitor.check("binance", lambda: binance.get_ticker("BTCUSDT")),
         "bybit": health_monitor.check("bybit", lambda: bybit.get_ticker("BTCUSDT")),
     }
     if not mt5_source.MT5_AVAILABLE:
-        results["mt5"] = {"source": "mt5", "status": "unavailable",
-                           "note": "MetaTrader5-Paket nicht installiert oder nicht auf Windows."}
+        results["mt5"] = {"source": "mt5", "status": "unavailable", "note": "MetaTrader5-Paket nicht installiert."}
     return results
 
 
 @mcp.tool()
 def get_source_uptime() -> dict:
-    """Anteil erfolgreicher Health-Checks je Quelle seit Prozessstart
-    (0.0-1.0), basierend auf der Historie aus check_connector_health.
-    """
+    """Erfolgsquote der Health-Checks je Quelle seit Prozessstart (0.0-1.0)."""
     return {name: health_monitor.uptime(name) for name in ("crypto_com", "binance", "bybit")}
 
 
 @mcp.tool()
 def get_recent_alerts(limit: int = 20, level: str | None = None) -> list:
-    """Zeigt die letzten Alerts (Datenqualitaetsprobleme, Health-Check-
-    Fehlschlaege). level optional: 'info', 'warning', 'critical'.
-    Wenn die Umgebungsvariable ALERT_WEBHOOK_URL gesetzt ist, gehen
-    warning/critical-Alerts zusaetzlich an diesen Webhook (Slack/Discord-kompatibel).
-    """
+    """Letzte Alerts. level optional: info/warning/critical. ALERT_WEBHOOK_URL env var -> zusaetzlich Slack/Discord."""
     return alert_manager.recent(limit=limit, level=level)
 
 
@@ -537,22 +316,13 @@ def get_recent_alerts(limit: int = 20, level: str | None = None) -> list:
 @mcp.tool()
 def filtered_news(keywords: list[str] | None = None, hours: float = 48,
                    min_relevance: float = 0.0, only_high_impact: bool = False) -> list[dict]:
-    """Holt Krypto-News aus offiziellen RSS-Feeds (CoinDesk, Cointelegraph --
-    keine Anmeldung/API-Key noetig) und filtert nach Zeitfenster, Keyword-
-    Relevanz und optional nur High-Impact-Meldungen (Regulierung, Hacks,
-    ETF-Entscheidungen etc.). Jeder Treffer bekommt zusaetzlich ein
-    heuristisches Sentiment (Keyword-basiert, KEIN ML-Modell).
-
-    keywords: z.B. ['bitcoin', 'btc'] -- ohne Angabe werden alle Meldungen
-        durchgelassen (nur Zeitfenster/Impact-Filter greifen).
-    """
-    return get_filtered_news(keywords=keywords, hours=hours,
-                              min_relevance=min_relevance, only_high_impact=only_high_impact)
+    """News aus RSS (CoinDesk/Cointelegraph, kein Key), gefiltert nach Zeitfenster/Keyword/Impact, mit Sentiment (heuristisch)."""
+    return get_filtered_news(keywords=keywords, hours=hours, min_relevance=min_relevance, only_high_impact=only_high_impact)
 
 
 @mcp.tool()
 def list_news_feeds() -> dict:
-    """Zeigt die aktuell konfigurierten RSS-Feeds (Quelle -> URL)."""
+    """Konfigurierte RSS-Feed-URLs."""
     return DEFAULT_FEEDS
 
 
@@ -563,11 +333,7 @@ def list_news_feeds() -> dict:
 @mcp.tool()
 def chart_patterns(symbol: str, source: str = "crypto", timeframe: str = "1h",
                     count: int = 200, swing_window: int = 5, min_confidence: float = 0.3) -> dict:
-    """Erkennt klassische Chartmuster (Double Top/Bottom, Head & Shoulders
-    (+invers), Dreiecke, Keile) ueber Swing-Punkt-Geometrie. Regelbasiert mit
-    Konfidenz-Score, KEIN ML-Modell -- als Zusatzsignal gedacht, nicht als
-    alleinige Handelsgrundlage.
-    """
+    """Double Top/Bottom, Head & Shoulders (+invers), Dreiecke, Keile -- regelbasiert mit Konfidenz-Score."""
     df = source_router.get_candles(source, symbol, timeframe, count)
     patterns = detect_chart_patterns(df, swing_window=swing_window, min_confidence=min_confidence)
     return {"symbol": symbol, "source": source, "timeframe": timeframe,
@@ -575,7 +341,7 @@ def chart_patterns(symbol: str, source: str = "crypto", timeframe: str = "1h",
 
 
 # ---------------------------------------------------------------------------
-# Stop-Loss & Trailing (reine Level-Berechnung, kein Backtest)
+# Stop-Loss & Trailing (Snapshot-Berechnung, kein Backtest)
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
@@ -583,17 +349,7 @@ def stop_loss_plan(symbol: str, entry_price: float, side: str, source: str = "cr
                     timeframe: str = "1h", count: int = 200, stop_method: str = "atr",
                     atr_mult: float = 1.5, trail_method: str = "chandelier",
                     trail_atr_mult: float = 3.0, r_multiple_tp: float = 2.0) -> dict:
-    """Berechnet einen Stop-Plan fuer den AKTUELLEN Zeitpunkt: initialer Stop
-    (ATR- oder Struktur-basiert), Take-Profit (R-Vielfaches), aktuelles
-    Trailing-Stop-Level (Chandelier Exit oder Prozent-Trailing).
-
-    WICHTIG: Snapshot-Berechnung, keine Trade-Simulation. Fuer echtes
-    Nachziehen ueber Zeit muss der Aufrufer den Stop selbst zwischenspeichern
-    und bei neuen Preisen erneut abrufen (siehe update_trailing_stop).
-
-    side: 'long' oder 'short'. stop_method: 'atr' oder 'structure'.
-    trail_method: 'chandelier' oder 'percent'.
-    """
+    """Initialer Stop (atr/structure) + Take-Profit (R-Vielfaches) + Trailing-Stop (chandelier/percent). Snapshot, kein Backtest."""
     df = source_router.get_candles(source, symbol, timeframe, count)
     plan = stop_management.compute_stop_plan(
         df, entry_price, side, stop_method=stop_method, atr_mult=atr_mult,
@@ -606,10 +362,7 @@ def stop_loss_plan(symbol: str, entry_price: float, side: str, source: str = "cr
 
 @mcp.tool()
 def update_trailing_stop_level(current_stop: float, proposed_stop: float, side: str) -> dict:
-    """Ratchet-Logik fuer einen bereits laufenden Trailing-Stop: der Stop darf
-    sich nie gegen die Position bewegen (long: nur nach oben, short: nur nach
-    unten). Der Aufrufer haelt current_stop selbst zwischen den Aufrufen.
-    """
+    """Ratchet-Logik: Stop bewegt sich nie gegen die Position (long: nur hoch, short: nur runter)."""
     new_stop = stop_management.update_trailing_stop(current_stop, proposed_stop, side)
     return {"side": side, "previous_stop": current_stop, "proposed_stop": proposed_stop, "new_stop": new_stop}
 
@@ -617,15 +370,12 @@ def update_trailing_stop_level(current_stop: float, proposed_stop: float, side: 
 @mcp.tool()
 def breakeven_check(entry_price: float, current_price: float, side: str, current_stop: float,
                      trigger_r_multiple: float = 1.0, initial_risk: float | None = None) -> dict:
-    """Prueft, ob der Preis genug in Gewinnrichtung gelaufen ist, um den Stop
-    auf Breakeven (+kleinem Puffer) zu verschieben, und gibt das neue Level zurueck."""
-    return stop_management.move_to_breakeven(
-        entry_price, current_price, side, current_stop, trigger_r_multiple, initial_risk,
-    )
+    """Prueft, ob der Preis weit genug gelaufen ist, um den Stop auf Breakeven zu verschieben."""
+    return stop_management.move_to_breakeven(entry_price, current_price, side, current_stop, trigger_r_multiple, initial_risk)
 
 
 def main():
-    """Entry point für den installierten CLI-Befehl 'trading-connector'."""
+    """Entry point fuer den installierten CLI-Befehl."""
     mcp.run()
 
 

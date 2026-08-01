@@ -49,40 +49,66 @@ Danach stehen die Tools in jeder Claude-Code-Session zur Verfuegung, z.B.:
 
 ## Verfuegbare Tools
 
+**26 Tools** (bewusst konsolidiert -- siehe [Kosten/Token-Effizienz](#kostentoken-effizienz) unten).
+
 | Tool | Quelle | Beschreibung |
 |---|---|---|
-| `crypto_candles` | Crypto.com | OHLCV-Kerzen |
-| `crypto_ticker` | Crypto.com | Aktueller Preis/24h-Change |
-| `crypto_order_book` | Crypto.com | Orderbuch |
-| `crypto_indicators` | Crypto.com | Voller Indikator-Satz + Fibonacci |
-| `binance_candles` / `binance_ticker` / `binance_order_book` / `binance_indicators` | Binance | Analog zu den Crypto.com-Tools |
-| `bybit_candles` / `bybit_ticker` / `bybit_order_book` / `bybit_indicators` | Bybit | Analog, mit zusätzlichem `category`-Parameter (`spot`/`linear`/`inverse`) |
+| `candles` | crypto/binance/bybit/mt5 | OHLCV-Kerzen (ein Tool statt vier) |
+| `ticker` | crypto/binance/bybit | Aktueller Preis/24h-Change/Volumen |
+| `order_book` | crypto/binance/bybit | Orderbuch (Bids/Asks) |
 | `tradingview_summary` | TradingView | Buy/Sell/Neutral-Rating je Indikator |
-| `create_pinescript_indicator` | – | Generiert Pine-Script-v6-Indikator-Code (SMA/EMA/RSI/MACD/Bollinger/ATR/Supertrend/VWAP/ADX/Stochastic) |
-| `create_pinescript_strategy` | – | Generiert Pine-Script-v6-Strategie-Code (Entry/Exit/Stop-Loss), lauffähig in TradingViews eigenem Strategy Tester |
-| `mt5_candles` | MetaTrader5 | OHLCV-Kerzen (nur lokal/Windows) |
-| `mt5_indicators` | MetaTrader5 | Voller Indikator-Satz + Fibonacci |
+| `create_pinescript_indicator` | – | Generiert Pine-Script-v6-Indikator-Code, speichert optional als `.txt` |
+| `create_pinescript_strategy` | – | Generiert Pine-Script-v6-Strategie-Code, lauffähig in TradingViews Strategy Tester |
 | `mt5_account_info` | MetaTrader5 | Kontostand/Equity/Margin |
 | `mt5_open_positions` | MetaTrader5 | Offene Positionen |
-| `mt5_max_history` | MetaTrader5 | Holt bis zu mehrjährige Historie (Ziel 5-6+ Jahre), gibt nur Metadaten zurück |
-| `mt5_download_csv` | MetaTrader5 | Wie oben, speichert die volle Historie als CSV lokal auf der Festplatte |
-| `list_available_indicators` | – | Liste aller berechneten Indikatoren |
-| `market_regime` | crypto/binance/bybit/mt5 | Eigenständige Regime-/Trenderkennung (Trendrichtung/-stärke, Marktstruktur, Volatilitätsregime) |
-| `rl_feature_vector` | crypto/binance/bybit/mt5 | RL-Feature-Vektor, `mode='model'` (183 skaleninvariante Features, Standard) oder `mode='raw'` (249, inkl. absoluter Preisniveaus) |
-| `extended_indicators` | crypto/binance/bybit/mt5 | 39 zusätzliche Indikatoren (Supertrend, TRIX, Vortex, PPO/PVO, Stochastic RSI, Hull MA, VWMA, Connors RSI, Fisher Transform, Williams Alligator etc.) |
-| `rl_core_feature_vector` | crypto/binance/bybit/mt5 | Handkuratiertes Core-Set (61 Features, weniger Redundanz) |
-| `check_data_quality` | crypto/binance/bybit/mt5 | Prüft Lücken, Duplikate, OHLC-Inkonsistenzen, Preisspünge -- ohne Features zu berechnen |
-| `analyze_feature_correlation` | crypto/binance/bybit/mt5 | Findet stark korrelierte Feature-Paare über echte Historie |
-| `list_rl_feature_categories` | – | Anzahl Features je Kategorie (raw/model/core) |
-| `check_connector_health` | crypto/binance/bybit | Pingt jede Quelle, misst Latenz, meldet Alerts bei Fehlern |
-| `get_source_uptime` | – | Erfolgsquote der Health-Checks je Quelle seit Prozessstart |
+| `mt5_max_history` | MetaTrader5 | Bis zu mehrjährige Historie (Ziel 5-6+ Jahre), nur Metadaten |
+| `mt5_download_csv` | MetaTrader5 | Wie oben, speichert volle Historie als CSV lokal |
+| `market_regime` | crypto/binance/bybit/mt5 | Trend-/Regime-Klassifikation |
+| `extended_indicators` | crypto/binance/bybit/mt5 | 39 Indikatoren (Supertrend, TRIX, Vortex, Connors RSI etc.), `fields`-Parameter für gezielte Abfrage |
+| `rl_feature_vector` | crypto/binance/bybit/mt5 | RL-Feature-Vektor (183 model / 249 raw), `fields`-Parameter für gezielte Abfrage |
+| `rl_core_feature_vector` | crypto/binance/bybit/mt5 | Handkuratiertes Core-Set (61 Features) |
+| `check_data_quality` | crypto/binance/bybit/mt5 | Lücken/Duplikate/OHLC-Inkonsistenzen/Preisspünge |
+| `analyze_feature_correlation` | crypto/binance/bybit/mt5 | Stark korrelierte Feature-Paare über echte Historie |
+| `list_rl_feature_categories` | – | Feature-Anzahl je Kategorie (raw/model/core) |
+| `check_connector_health` | crypto/binance/bybit | Health-Check je Quelle, Latenz, Alerts bei Fehlern |
+| `get_source_uptime` | – | Erfolgsquote der Health-Checks je Quelle |
 | `get_recent_alerts` | – | Letzte Alerts (Datenqualität, Health-Check-Fehler) |
-| `filtered_news` | RSS (CoinDesk, Cointelegraph) | News gefiltert nach Zeitfenster/Keyword-Relevanz/Impact, mit heuristischem Sentiment |
-| `list_news_feeds` | – | Zeigt konfigurierte RSS-Feed-URLs |
-| `chart_patterns` | crypto/binance/bybit/mt5 | Erkennt Double Top/Bottom, Head & Shoulders, Dreiecke, Keile (regelbasiert, mit Konfidenz-Score) |
-| `stop_loss_plan` | crypto/binance/bybit/mt5 | Initialer Stop (ATR/Struktur) + Take-Profit + aktuelles Trailing-Stop-Level (Snapshot, kein Backtest) |
-| `update_trailing_stop_level` | – | Ratchet-Logik: Stop darf sich nie gegen die Position bewegen |
-| `breakeven_check` | – | Prüft, ob der Preis weit genug fürs Verschieben auf Breakeven gelaufen ist |
+| `filtered_news` | RSS (CoinDesk, Cointelegraph) | News gefiltert nach Zeitfenster/Keyword/Impact, mit Sentiment |
+| `list_news_feeds` | – | Konfigurierte RSS-Feed-URLs |
+| `chart_patterns` | crypto/binance/bybit/mt5 | Double Top/Bottom, Head & Shoulders, Dreiecke, Keile |
+| `stop_loss_plan` | crypto/binance/bybit/mt5 | Initialer Stop + Take-Profit + Trailing-Stop-Level (Snapshot) |
+| `update_trailing_stop_level` | – | Ratchet-Logik für laufenden Trailing-Stop |
+| `breakeven_check` | – | Prüft Verschiebung auf Breakeven |
+
+### Kosten/Token-Effizienz
+
+Dieser Connector wurde 2x überarbeitet, um Claude-Code-Sessions günstiger zu
+machen. Zwei unterschiedliche Kostenquellen, beide adressiert:
+
+1. **Tool-Schema-Overhead** (grösster Hebel): jedes Tool (Name + Beschreibung
+   + Parameter-Schema) wird bei **jeder einzelnen Nachricht** in Claude Code
+   mitgeschickt, unabhängig davon, ob es genutzt wird. Gemessen:
+   ursprünglich 38 Tools ≈ 6.076 Tokens Fixkosten pro Nachricht. Durch
+   Konsolidierung (crypto_candles/binance_candles/bybit_candles/mt5_candles →
+   ein generisches `candles`-Tool, analog für ticker/order_book, veraltete
+   Klassik-Indikator-Tools entfernt) und gekürzte Docstrings: **26 Tools ≈
+   3.739 Tokens (-38%)**.
+2. **Tool-Antwortgrösse**: `rl_feature_vector` und `extended_indicators`
+   akzeptieren jetzt einen optionalen `fields`-Parameter -- nur die
+   angefragten Keys werden zurückgegeben. Getestet: bei einer gezielten
+   Frage (z.B. nur RSI + ADX) sinkt die Antwortgrösse von `rl_feature_vector`
+   um 98,9%, von `extended_indicators` um 94,9%, statt immer den vollen
+   Vektor (183 bzw. 39 Keys) zurückzugeben.
+
+**Wichtige Klarstellung**: Caching (`cache.py`) spart **keine** Claude-Tokens
+-- das reduziert nur Latenz/API-Last auf der Datenquellen-Seite. Was Claude
+tatsächlich Tokens kostet, ist die Grösse der Tool-Definitionen und der
+Tool-Antworten, nicht wie schnell die Daten geholt wurden.
+
+**Praktische Faustregel für Claude Code**: für einfache Fragen (aktueller
+Preis, ein einzelner Indikator) `ticker`/`extended_indicators` mit `fields`
+nutzen statt `rl_feature_vector` ohne Filter -- der volle 183-Feature-Vektor
+ist für ML-Trainingsdaten gedacht, nicht für "was ist der RSI gerade".
 
 ### Binance & Bybit
 

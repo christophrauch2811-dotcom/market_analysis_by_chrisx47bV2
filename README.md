@@ -28,12 +28,13 @@ cd market-analysis-by-chrisx47b
 pip install .
 ```
 
-Beides installiert den CLI-Befehl `trading-connector`.
+Beides installiert den CLI-Befehl `market-analysis-by-chrisx47b`.
 
-Unter Windows zusaetzlich `pip install "market-analysis-by-chrisx47b[mt5]"` fuer die
-MetaTrader5-Unterstuetzung, plus das MT5-Terminal installiert und eingeloggt lassen.
-Auf macOS/Linux werden die MT5-Tools automatisch mit einer klaren Fehlermeldung
-abgelehnt statt abzustuerzen.
+Auf Windows wird `MetaTrader5` automatisch mitinstalliert (Marker in
+`pyproject.toml`, `pip install MetaTrader5` als separater Schritt ist nicht
+mehr nötig) -- das MT5-Terminal muss trotzdem installiert und eingeloggt
+sein. Auf macOS/Linux wird `MetaTrader5` automatisch übersprungen (kein
+Fehler); die MT5-Tools lehnen dort mit einer klaren Fehlermeldung ab statt abzustürzen.
 
 ## In Claude Code einbinden
 

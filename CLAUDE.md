@@ -43,7 +43,8 @@ Paketname: `market_analysis_by_chrisx47b` (Repo/PyPI-Name mit Bindestrichen:
 python -m venv venv
 venv\Scripts\activate   # Windows; Linux/Mac: source venv/bin/activate
 pip install -e .
-pip install MetaTrader5  # nur falls MT5 genutzt wird (separater Schritt!)
+# MetaTrader5 wird auf Windows automatisch mitinstalliert (Marker in
+# pyproject.toml), auf Linux/Mac automatisch uebersprungen -- kein separater Schritt mehr.
 ```
 
 ## Testen
@@ -83,9 +84,12 @@ Fixes unten).
    `ABSOLUTE_PRICE_KEYS` ausgeschlossen ist (absolutes Preisniveau) -- ersetzt
    durch `macd_bull_cross` (skaleninvariant). Beim Ergänzen von Features zu
    `CORE_FEATURE_SET` immer gegen `ABSOLUTE_PRICE_KEYS` prüfen.
-6. **MetaTrader5-Paket** ist eine optionale Abhängigkeit (`pip install
-   MetaTrader5`, separater Schritt) -- nicht automatisch Teil von `pip
-   install -e .`, da es nur auf Windows installierbar ist.
+6. **MetaTrader5-Paket** war urspruenglich eine optionale Extra-Abhaengigkeit
+   (`pip install ".[mt5]"` noetig) -- das fuehrte dazu, dass es bei jeder
+   Neuinstallation vergessen wurde. Jetzt in den Hauptabhaengigkeiten mit
+   Windows-Marker (`MetaTrader5>=5.0.45; platform_system=='Windows'`) --
+   `pip install -e .` installiert es auf Windows automatisch, auf Linux/Mac
+   wird es automatisch uebersprungen (kein Fehler).
 
 ## Kosten/Token-Konventionen (wichtig für neue Tools)
 

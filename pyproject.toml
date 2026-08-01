@@ -15,10 +15,8 @@ dependencies = [
     "requests>=2.31.0",
     "pandas>=2.0.0",
     "tradingview-ta>=3.3.0",
+    "MetaTrader5>=5.0.45; platform_system=='Windows'",
 ]
-
-[project.optional-dependencies]
-mt5 = ["MetaTrader5>=5.0.45; platform_system=='Windows'"]
 
 [project.scripts]
 market-analysis-by-chrisx47b = "market_analysis_by_chrisx47b.server:main"

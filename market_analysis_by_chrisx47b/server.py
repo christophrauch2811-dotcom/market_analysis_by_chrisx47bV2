@@ -1,8 +1,8 @@
 """
-Trading-MCP-Connector
-======================
+Market Analysis by chrisx47b
+=============================
 Stellt Claude Code (oder jedem anderen MCP-Client) Marktdaten und eine breite
-Indikator-/Signal-Bibliothek aus fuenf Quellen bereit:
+Analyse-Bibliothek aus fuenf Quellen bereit:
 
   - Crypto.com  (oeffentliche REST-API, kein Key noetig)
   - Binance     (oeffentliche REST-API, kein Key noetig)
@@ -10,7 +10,8 @@ Indikator-/Signal-Bibliothek aus fuenf Quellen bereit:
   - TradingView (inoffizielle technische Analyse-Zusammenfassung)
   - MetaTrader5 (nur lokal auf Windows mit laufendem Terminal)
 
-Reiner Lese-/Analyse-Connector. Keine Order-Ausfuehrung.
+Reiner Lese-/Analyse-Connector. Keine Order-Ausfuehrung, kein Backtesting,
+keine Monte-Carlo-Simulation (bewusst nicht Teil dieses Connectors).
 Keine Anlageberatung -- alle Ausgaben sind rein informativ/technisch.
 
 Start:
@@ -27,10 +28,12 @@ from .rl_features import build_feature_vector, build_model_feature_vector, FEATU
 from .regime import detect_regime
 from .data_quality import validate_ohlcv
 from .feature_selection import correlation_report, build_core_feature_vector, CORE_FEATURE_SET
-from .backtest import backtest_breakout_strategy
 from .monitoring import alert_manager, health_monitor, alert_on_data_quality
+from .news_filter import get_filtered_news, DEFAULT_FEEDS
+from .chart_patterns import detect_chart_patterns
+from . import stop_management
 
-mcp = FastMCP("trading-connector")
+mcp = FastMCP("market-analysis-by-chrisx47b")
 
 DISCLAIMER = (
     "Hinweis: Diese Daten sind rein informativ/technischer Natur und stellen "
@@ -288,18 +291,6 @@ def check_data_quality(symbol: str, source: str = "crypto", timeframe: str = "1h
     return result
 
 
-@mcp.tool()
-def backtest_breakout(symbol: str, source: str = "crypto", timeframe: str = "1h", count: int = 500) -> dict:
-    """Sanity-Check fuer die Donchian-Breakout-Logik: simuliert eine einfache
-    Long/Short/Flat-Strategie auf Basis von 20-Kerzen-Ausbruechen (vereinfachte
-    Simulation, keine Order-Ausfuehrung/Gebuehren-Realitaet -- nur Plausibilisierung).
-    """
-    df = source_router.get_candles(source, symbol, timeframe, count)
-    result = backtest_breakout_strategy(df)
-    result["disclaimer"] = DISCLAIMER
-    return result
-
-
 # ---------------------------------------------------------------------------
 # Uebergreifend
 # ---------------------------------------------------------------------------
@@ -409,6 +400,100 @@ def get_recent_alerts(limit: int = 20, level: str | None = None) -> list:
     warning/critical-Alerts zusaetzlich an diesen Webhook (Slack/Discord-kompatibel).
     """
     return alert_manager.recent(limit=limit, level=level)
+
+
+# ---------------------------------------------------------------------------
+# News-Filter
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def filtered_news(keywords: list[str] | None = None, hours: float = 48,
+                   min_relevance: float = 0.0, only_high_impact: bool = False) -> list[dict]:
+    """Holt Krypto-News aus offiziellen RSS-Feeds (CoinDesk, Cointelegraph --
+    keine Anmeldung/API-Key noetig) und filtert nach Zeitfenster, Keyword-
+    Relevanz und optional nur High-Impact-Meldungen (Regulierung, Hacks,
+    ETF-Entscheidungen etc.). Jeder Treffer bekommt zusaetzlich ein
+    heuristisches Sentiment (Keyword-basiert, KEIN ML-Modell).
+
+    keywords: z.B. ['bitcoin', 'btc'] -- ohne Angabe werden alle Meldungen
+        durchgelassen (nur Zeitfenster/Impact-Filter greifen).
+    """
+    return get_filtered_news(keywords=keywords, hours=hours,
+                              min_relevance=min_relevance, only_high_impact=only_high_impact)
+
+
+@mcp.tool()
+def list_news_feeds() -> dict:
+    """Zeigt die aktuell konfigurierten RSS-Feeds (Quelle -> URL)."""
+    return DEFAULT_FEEDS
+
+
+# ---------------------------------------------------------------------------
+# Chart-Pattern-Erkennung
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def chart_patterns(symbol: str, source: str = "crypto", timeframe: str = "1h",
+                    count: int = 200, swing_window: int = 5, min_confidence: float = 0.3) -> dict:
+    """Erkennt klassische Chartmuster (Double Top/Bottom, Head & Shoulders
+    (+invers), Dreiecke, Keile) ueber Swing-Punkt-Geometrie. Regelbasiert mit
+    Konfidenz-Score, KEIN ML-Modell -- als Zusatzsignal gedacht, nicht als
+    alleinige Handelsgrundlage.
+    """
+    df = source_router.get_candles(source, symbol, timeframe, count)
+    patterns = detect_chart_patterns(df, swing_window=swing_window, min_confidence=min_confidence)
+    return {"symbol": symbol, "source": source, "timeframe": timeframe,
+            "patterns_found": len(patterns), "patterns": patterns, "disclaimer": DISCLAIMER}
+
+
+# ---------------------------------------------------------------------------
+# Stop-Loss & Trailing (reine Level-Berechnung, kein Backtest)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def stop_loss_plan(symbol: str, entry_price: float, side: str, source: str = "crypto",
+                    timeframe: str = "1h", count: int = 200, stop_method: str = "atr",
+                    atr_mult: float = 1.5, trail_method: str = "chandelier",
+                    trail_atr_mult: float = 3.0, r_multiple_tp: float = 2.0) -> dict:
+    """Berechnet einen Stop-Plan fuer den AKTUELLEN Zeitpunkt: initialer Stop
+    (ATR- oder Struktur-basiert), Take-Profit (R-Vielfaches), aktuelles
+    Trailing-Stop-Level (Chandelier Exit oder Prozent-Trailing).
+
+    WICHTIG: Snapshot-Berechnung, keine Trade-Simulation. Fuer echtes
+    Nachziehen ueber Zeit muss der Aufrufer den Stop selbst zwischenspeichern
+    und bei neuen Preisen erneut abrufen (siehe update_trailing_stop).
+
+    side: 'long' oder 'short'. stop_method: 'atr' oder 'structure'.
+    trail_method: 'chandelier' oder 'percent'.
+    """
+    df = source_router.get_candles(source, symbol, timeframe, count)
+    plan = stop_management.compute_stop_plan(
+        df, entry_price, side, stop_method=stop_method, atr_mult=atr_mult,
+        trail_method=trail_method, trail_atr_mult=trail_atr_mult, r_multiple_tp=r_multiple_tp,
+    )
+    plan["symbol"] = symbol
+    plan["disclaimer"] = DISCLAIMER
+    return plan
+
+
+@mcp.tool()
+def update_trailing_stop_level(current_stop: float, proposed_stop: float, side: str) -> dict:
+    """Ratchet-Logik fuer einen bereits laufenden Trailing-Stop: der Stop darf
+    sich nie gegen die Position bewegen (long: nur nach oben, short: nur nach
+    unten). Der Aufrufer haelt current_stop selbst zwischen den Aufrufen.
+    """
+    new_stop = stop_management.update_trailing_stop(current_stop, proposed_stop, side)
+    return {"side": side, "previous_stop": current_stop, "proposed_stop": proposed_stop, "new_stop": new_stop}
+
+
+@mcp.tool()
+def breakeven_check(entry_price: float, current_price: float, side: str, current_stop: float,
+                     trigger_r_multiple: float = 1.0, initial_risk: float | None = None) -> dict:
+    """Prueft, ob der Preis genug in Gewinnrichtung gelaufen ist, um den Stop
+    auf Breakeven (+kleinem Puffer) zu verschieben, und gibt das neue Level zurueck."""
+    return stop_management.move_to_breakeven(
+        entry_price, current_price, side, current_stop, trigger_r_multiple, initial_risk,
+    )
 
 
 def main():

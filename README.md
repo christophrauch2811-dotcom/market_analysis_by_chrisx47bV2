@@ -1,4 +1,4 @@
-# Trading MCP Connector
+# Market Analysis by chrisx47b
 
 Ein MCP-Server, der Claude Code (oder jedem MCP-faehigen Client) Marktdaten und
 technische Indikatoren aus fuenf Quellen bereitstellt:
@@ -17,20 +17,20 @@ Alle Ausgaben sind informativ/technischer Natur, keine Anlageberatung.
 **Direkt aus GitHub (empfohlen):**
 
 ```bash
-pip install git+https://github.com/<dein-username>/trading-mcp-connector.git
+pip install git+https://github.com/<dein-username>/market-analysis-by-chrisx47b.git
 ```
 
 **Lokal aus dem Repo:**
 
 ```bash
-git clone https://github.com/<dein-username>/trading-mcp-connector.git
-cd trading-mcp-connector
+git clone https://github.com/<dein-username>/market-analysis-by-chrisx47b.git
+cd market-analysis-by-chrisx47b
 pip install .
 ```
 
 Beides installiert den CLI-Befehl `trading-connector`.
 
-Unter Windows zusaetzlich `pip install "trading-mcp-connector[mt5]"` fuer die
+Unter Windows zusaetzlich `pip install "market-analysis-by-chrisx47b[mt5]"` fuer die
 MetaTrader5-Unterstuetzung, plus das MT5-Terminal installiert und eingeloggt lassen.
 Auf macOS/Linux werden die MT5-Tools automatisch mit einer klaren Fehlermeldung
 abgelehnt statt abzustuerzen.
@@ -38,7 +38,7 @@ abgelehnt statt abzustuerzen.
 ## In Claude Code einbinden
 
 ```bash
-claude mcp add trading-connector -- trading-connector
+claude mcp add market-analysis-by-chrisx47b -- market-analysis-by-chrisx47b
 ```
 
 Danach stehen die Tools in jeder Claude-Code-Session zur Verfuegung, z.B.:
@@ -68,11 +68,16 @@ Danach stehen die Tools in jeder Claude-Code-Session zur Verfuegung, z.B.:
 | `rl_core_feature_vector` | crypto/binance/bybit/mt5 | Handkuratiertes Core-Set (61 Features, weniger Redundanz) |
 | `check_data_quality` | crypto/binance/bybit/mt5 | Prüft Lücken, Duplikate, OHLC-Inkonsistenzen, Preisspünge -- ohne Features zu berechnen |
 | `analyze_feature_correlation` | crypto/binance/bybit/mt5 | Findet stark korrelierte Feature-Paare über echte Historie |
-| `backtest_breakout` | crypto/binance/bybit/mt5 | Vereinfachter Sanity-Check für die Donchian-Breakout-Logik |
 | `list_rl_feature_categories` | – | Anzahl Features je Kategorie (raw/model/core) |
 | `check_connector_health` | crypto/binance/bybit | Pingt jede Quelle, misst Latenz, meldet Alerts bei Fehlern |
 | `get_source_uptime` | – | Erfolgsquote der Health-Checks je Quelle seit Prozessstart |
 | `get_recent_alerts` | – | Letzte Alerts (Datenqualität, Health-Check-Fehler) |
+| `filtered_news` | RSS (CoinDesk, Cointelegraph) | News gefiltert nach Zeitfenster/Keyword-Relevanz/Impact, mit heuristischem Sentiment |
+| `list_news_feeds` | – | Zeigt konfigurierte RSS-Feed-URLs |
+| `chart_patterns` | crypto/binance/bybit/mt5 | Erkennt Double Top/Bottom, Head & Shoulders, Dreiecke, Keile (regelbasiert, mit Konfidenz-Score) |
+| `stop_loss_plan` | crypto/binance/bybit/mt5 | Initialer Stop (ATR/Struktur) + Take-Profit + aktuelles Trailing-Stop-Level (Snapshot, kein Backtest) |
+| `update_trailing_stop_level` | – | Ratchet-Logik: Stop darf sich nie gegen die Position bewegen |
+| `breakeven_check` | – | Prüft, ob der Preis weit genug fürs Verschieben auf Breakeven gelaufen ist |
 
 ### Binance & Bybit
 
@@ -89,10 +94,57 @@ aus dem Gedächtnis geraten):
   mit der Originalmeldung.
 
 `market_regime`, `rl_feature_vector`, `rl_core_feature_vector`,
-`check_data_quality`, `analyze_feature_correlation` und `backtest_breakout`
+`check_data_quality`, `analyze_feature_correlation` und `chart_patterns`
 akzeptieren alle denselben `source`-Parameter (`'crypto'`, `'binance'`,
 `'bybit'`, `'mt5'`) -- neue Quellen werden zentral in `source_router.py`
 registriert, nicht in jedem Tool einzeln.
+
+### News-Filter (`news_filter.py`)
+
+CryptoCompare (die naheliegende keyless Crypto-News-API) verlangt inzwischen
+einen API-Key -- passt nicht zur "kein Key nötig"-Linie der anderen Module.
+Stattdessen: offizielle, öffentliche **RSS-Feeds** (CoinDesk, Cointelegraph),
+kein API-Key nötig.
+
+- `filtered_news(keywords, hours, min_relevance, only_high_impact)` --
+  filtert nach Zeitfenster, Keyword-Relevanz, entfernt Near-Duplicates
+  (mehrere Quellen berichten oft fast wortgleich dieselbe Meldung).
+- Jeder Treffer bekommt `impact` (`high`/`normal`, Keyword-Liste in
+  `HIGH_IMPACT_KEYWORDS`) und `sentiment` (heuristisches Keyword-Sentiment,
+  **kein ML-Modell** -- nur ein grober erster Filter).
+- **Quellenunabhängig gebaut**: `filter_news()` arbeitet auf einer Liste von
+  dicts (`title`/`link`/`published`/`summary`) -- funktioniert genauso mit
+  Items aus einer bezahlten News-API oder einem anderen MCP-Connector.
+- ⚠️ **Ungetestet mit echten Daten**: Der XML-Parser folgt dem
+  Standard-RSS-2.0-Format und wurde gegen ein synthetisches Beispieldokument
+  getestet, aber ich konnte die echten Feed-Inhalte aus dieser Sandbox nicht
+  abrufen (Netzwerk-Domain nicht freigegeben). Bitte lokal verifizieren.
+
+### Chart-Pattern-Erkennung (`chart_patterns.py`)
+
+Swing-Punkt-basiert (lokale Hoch-/Tiefpunkte über ein Fenster), erkennt:
+Double Top/Bottom, Head & Shoulders (+ invers), Ascending/Descending/
+Symmetrical Triangle, Rising/Falling Wedge. Jeder Treffer hat einen
+`confidence`-Score (Toleranzband bei Doppel-Mustern, R² der Trendlinien bei
+Dreiecken/Keilen). **Regelbasiert, kein ML-Modell** -- Chartmuster sind per
+Definition fuzzy; als Zusatzsignal gedacht, nicht als alleinige
+Handelsgrundlage.
+
+### Stop-Loss & Trailing (`stop_management.py`)
+
+**Reine Level-Berechnung, bewusst kein Backtest/keine P&L-Simulation.**
+`stop_loss_plan` liefert einen Snapshot für den aktuellen Zeitpunkt:
+
+- Initialer Stop: ATR-basiert oder Struktur-basiert (letztes Swing-Low/-High)
+- Take-Profit: R-Vielfaches des initialen Risikos
+- Trailing-Stop: Chandelier Exit (ATR-basiert) oder Prozent-Trailing
+
+Für echtes Nachziehen über Zeit hält der Aufrufer den aktuellen Stop selbst
+und ruft bei jedem neuen Preis `update_trailing_stop_level` auf --
+Ratchet-Logik stellt sicher, dass sich der Stop nie gegen die Position
+bewegt (long: nur nach oben, short: nur nach unten). `breakeven_check` prüft
+zusätzlich, ob der Preis weit genug gelaufen ist, um auf Breakeven zu
+verschieben.
 
 ### Monitoring & Alerting (`monitoring.py`)
 
@@ -142,11 +194,16 @@ Ein Review dieses Connectors ergab 7 Verbesserungspunkte -- alle sind jetzt umge
    `feature_schema_hash()` in jedem `rl_feature_vector`-Ergebnis. Ändert sich
    der Hash, hat sich das Feature-Set geändert -- Signal, ein trainiertes Modell
    ggf. neu zu trainieren statt stillschweigend falsche Spalten zu füttern.
-7. **Backtesting-Schicht** (`backtest.py`) -- `backtest_breakout` simuliert eine
-   einfache Donchian-Strategie zur groben Plausibilisierung (Return, Max
-   Drawdown, Win Rate, Trades vs. Buy&Hold). **Keine echte Order-Simulation**
-   (keine Slippage/Liquidität/Orderbuch-Tiefe) -- nur ein schneller Sanity-Check,
-   keine Performance-Zusage.
+7. ~~Backtesting-Schicht~~ -- **wieder entfernt**: Auf Wunsch macht dieser
+   Connector bewusst kein Backtesting/Monte-Carlo mehr. Andere Lastcharakteristik
+   (lange, blockierende Läufe statt Millisekunden-Antworten) und andere
+   Zuständigkeit (Backtest-Logik ist quellenunabhängig, gehört nicht in einen
+   Marktdaten-Connector) -- dafür wäre ein eigener Connector sinnvoller.
+
+**Neu seit der Umbenennung zu "Market Analysis by chrisx47b":**
+- News-Filter (`news_filter.py`, RSS statt kostenpflichtiger API)
+- Chart-Pattern-Erkennung (`chart_patterns.py`, regelbasiert mit Konfidenz-Score)
+- Stop-Loss/Trailing-Berechnung (`stop_management.py`, reine Level-Berechnung, kein Backtest)
 
 **Weiterhin offen** (bewusst nicht in diesem Durchgang angegangen):
 - Live-Verifikation bei dir mit echten API-Keys/Netzwerkzugriff (aus dieser

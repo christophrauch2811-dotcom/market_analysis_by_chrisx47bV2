@@ -18,8 +18,8 @@ jobs:
         run: |
           python -c "
           import pandas as pd, numpy as np
-          from trading_mcp_connector.regime import detect_regime
-          from trading_mcp_connector.rl_features import build_feature_vector
+          from market_analysis_by_chrisx47b.regime import detect_regime
+          from market_analysis_by_chrisx47b.rl_features import build_feature_vector
 
           n = 300
           price = 100 + np.cumsum(np.random.randn(n))

@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "trading-mcp-connector"
-version = "0.1.0"
-description = "MCP-Connector für Claude Code: Marktdaten, 210 RL-Features, Regime-/Trenderkennung aus Crypto.com, TradingView und MetaTrader5"
+name = "market-analysis-by-chrisx47b"
+version = "0.2.0"
+description = "MCP-Connector für Claude Code: Marktdaten, Regime-/Trend-/Chartmuster-Erkennung, News-Filter und Stop-Loss/Trailing aus Crypto.com, Binance, Bybit, TradingView und MetaTrader5"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -21,7 +21,7 @@ dependencies = [
 mt5 = ["MetaTrader5>=5.0.45; platform_system=='Windows'"]
 
 [project.scripts]
-trading-connector = "trading_mcp_connector.server:main"
+market-analysis-by-chrisx47b = "market_analysis_by_chrisx47b.server:main"
 
 [tool.setuptools.packages.find]
-include = ["trading_mcp_connector*"]
+include = ["market_analysis_by_chrisx47b*"]

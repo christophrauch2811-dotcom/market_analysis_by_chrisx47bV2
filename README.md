@@ -60,8 +60,53 @@ Danach stehen die Tools in jeder Claude-Code-Session zur Verfuegung, z.B.:
 | `mt5_open_positions` | MetaTrader5 | Offene Positionen |
 | `list_available_indicators` | – | Liste aller berechneten Indikatoren |
 | `market_regime` | Crypto.com/MT5 | Eigenständige Regime-/Trenderkennung (Trendrichtung/-stärke, Marktstruktur, Volatilitätsregime) |
-| `rl_feature_vector` | Crypto.com/MT5 | **210 RL-Features** inkl. Regime/Trend, Breakout, Stop-Loss-Distanzen etc. |
-| `list_rl_feature_categories` | – | Anzahl Features je Kategorie |
+| `rl_feature_vector` | Crypto.com/MT5 | RL-Feature-Vektor, `mode='model'` (154 skaleninvariante Features, Standard) oder `mode='raw'` (210, inkl. absoluter Preisniveaus) |
+| `rl_core_feature_vector` | Crypto.com/MT5 | Handkuratiertes Core-Set (61 Features, weniger Redundanz) |
+| `check_data_quality` | Crypto.com/MT5 | Prüft Lücken, Duplikate, OHLC-Inkonsistenzen, Preisspünge -- ohne Features zu berechnen |
+| `analyze_feature_correlation` | Crypto.com/MT5 | Findet stark korrelierte Feature-Paare über echte Historie |
+| `backtest_breakout` | Crypto.com/MT5 | Vereinfachter Sanity-Check für die Donchian-Breakout-Logik |
+| `list_rl_feature_categories` | – | Anzahl Features je Kategorie (raw/model/core) |
+
+### Ehrliche Grenzen & was seit dem letzten Review verbessert wurde
+
+Ein Review dieses Connectors ergab 7 Verbesserungspunkte -- alle sind jetzt umgesetzt:
+
+1. **Mit echten Daten validiert** -- Abgleich mit der echten Crypto.com-Dokumentation
+   deckte einen echten Bug auf: `get_ticker()` rief den falschen Endpunkt auf
+   (`get-ticker` statt `get-tickers`), das ist gefixt. Feldnamen (`o,h,l,c,v,t`)
+   und Antwortstruktur (`result.data`) stimmen mit dem Code überein.
+2. **Feature-Set fürs Modell getrennt** (`rl_features.py`) -- `rl_feature_vector`
+   liefert per Default (`mode='model'`) nur skaleninvariante Features (154 statt 210).
+   Absolute Preisniveaus (`sma_20`, `pivot_point`, `vwap` etc., siehe
+   `ABSOLUTE_PRICE_KEYS`) sind ausgeschlossen, weil sie nicht zwischen
+   Instrumenten/Zeiträumen generalisieren. `mode='raw'` liefert weiterhin alle
+   210 für Menschen/Debugging/Dashboards.
+3. **Datenqualitätsprüfung** (`data_quality.py`) -- `validate_ohlcv()` erkennt
+   Lücken, Duplikate, OHLC-Inkonsistenzen und unplausible Preisspünge, bevor
+   Features berechnet werden. Läuft automatisch in `rl_feature_vector` mit
+   (Ergebnis unter `data_quality`), zusätzlich als eigenständiges Tool
+   `check_data_quality` abrufbar.
+4. **Caching & Rate-Limiting** (`cache.py`) -- TTL-Cache auf allen
+   API-Aufrufen (Crypto.com: 30s für Candles, TradingView: 60s) plus
+   Token-Bucket-Rate-Limiter, deutlich unter den offiziellen Limits.
+5. **Feature-Redundanz reduziert** (`feature_selection.py`) -- `rl_core_feature_vector`
+   liefert ein handkuratiertes 61-Feature-Set. `analyze_feature_correlation`
+   berechnet auf echter Historie, welche Features stark korrelieren.
+6. **Feature-Schema versioniert** -- `FEATURE_SCHEMA_VERSION` +
+   `feature_schema_hash()` in jedem `rl_feature_vector`-Ergebnis. Ändert sich
+   der Hash, hat sich das Feature-Set geändert -- Signal, ein trainiertes Modell
+   ggf. neu zu trainieren statt stillschweigend falsche Spalten zu füttern.
+7. **Backtesting-Schicht** (`backtest.py`) -- `backtest_breakout` simuliert eine
+   einfache Donchian-Strategie zur groben Plausibilisierung (Return, Max
+   Drawdown, Win Rate, Trades vs. Buy&Hold). **Keine echte Order-Simulation**
+   (keine Slippage/Liquidität/Orderbuch-Tiefe) -- nur ein schneller Sanity-Check,
+   keine Performance-Zusage.
+
+**Weiterhin offen** (bewusst nicht in diesem Durchgang angegangen):
+- Live-Verifikation bei dir mit echten API-Keys/Netzwerkzugriff (aus dieser
+  Sandbox nicht möglich -- `api.crypto.com` ist nicht erreichbar)
+- TradingView bleibt eine inoffizielle Anbindung (Grauzone, siehe oben)
+- `hurst_exponent()` in `regime.py` ist weiterhin eine Näherung, kein exakter Wert
 
 ### Regime-/Trenderkennung (`regime.py`)
 

@@ -10,6 +10,8 @@ pip install MetaTrader5
 
 import pandas as pd
 
+from ..cache import ttl_cache
+
 try:
     import MetaTrader5 as mt5
     MT5_AVAILABLE = True
@@ -37,6 +39,7 @@ def ensure_connection():
         raise RuntimeError(f"MT5-Initialisierung fehlgeschlagen: {mt5.last_error()}")
 
 
+@ttl_cache(seconds=10)
 def get_ohlcv(symbol: str, timeframe: str = "1h", count: int = 200) -> pd.DataFrame:
     ensure_connection()
     tf = getattr(mt5, TIMEFRAME_MAP.get(timeframe, "TIMEFRAME_H1"))

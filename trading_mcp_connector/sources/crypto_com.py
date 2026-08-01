@@ -7,6 +7,8 @@ Doku: https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html
 import requests
 import pandas as pd
 
+from ..cache import ttl_cache, crypto_com_limiter
+
 BASE_URL = "https://api.crypto.com/exchange/v1"
 
 TIMEFRAME_MAP = {
@@ -15,12 +17,14 @@ TIMEFRAME_MAP = {
 }
 
 
+@ttl_cache(seconds=30)
 def get_candlestick(symbol: str, timeframe: str = "1h", count: int = 200) -> pd.DataFrame:
     """
     symbol: z.B. 'BTCUSD-PERP' oder 'BTC_USDT'
     timeframe: einer der Keys in TIMEFRAME_MAP
     """
     tf = TIMEFRAME_MAP.get(timeframe, "1h")
+    crypto_com_limiter.acquire()
     resp = requests.get(
         f"{BASE_URL}/public/get-candlestick",
         params={"instrument_name": symbol, "timeframe": tf, "count": count},
@@ -35,13 +39,17 @@ def get_candlestick(symbol: str, timeframe: str = "1h", count: int = 200) -> pd.
     return df[["open", "high", "low", "close", "volume"]].astype(float)
 
 
+@ttl_cache(seconds=5)
 def get_ticker(symbol: str) -> dict:
-    resp = requests.get(f"{BASE_URL}/public/get-ticker", params={"instrument_name": symbol}, timeout=10)
+    crypto_com_limiter.acquire()
+    resp = requests.get(f"{BASE_URL}/public/get-tickers", params={"instrument_name": symbol}, timeout=10)
     resp.raise_for_status()
     return resp.json()["result"]["data"][0]
 
 
+@ttl_cache(seconds=5)
 def get_order_book(symbol: str, depth: int = 10) -> dict:
+    crypto_com_limiter.acquire()
     resp = requests.get(
         f"{BASE_URL}/public/get-book", params={"instrument_name": symbol, "depth": depth}, timeout=10
     )
@@ -49,7 +57,9 @@ def get_order_book(symbol: str, depth: int = 10) -> dict:
     return resp.json()["result"]["data"][0]
 
 
+@ttl_cache(seconds=3600)
 def list_instruments() -> list:
+    crypto_com_limiter.acquire()
     resp = requests.get(f"{BASE_URL}/public/get-instruments", timeout=10)
     resp.raise_for_status()
     return resp.json()["result"]["data"]

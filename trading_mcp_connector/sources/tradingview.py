@@ -8,6 +8,7 @@ Nutzung auf eigenes Risiko / gemaess TradingViews Nutzungsbedingungen.
 """
 
 from tradingview_ta import TA_Handler, Interval
+from ..cache import ttl_cache, tradingview_limiter
 
 INTERVAL_MAP = {
     "1m": Interval.INTERVAL_1_MINUTE,
@@ -20,12 +21,14 @@ INTERVAL_MAP = {
 }
 
 
+@ttl_cache(seconds=60)
 def get_technical_summary(symbol: str, exchange: str, screener: str, interval: str = "1h") -> dict:
     """
     symbol: z.B. 'BTCUSDT', 'XAUUSD', 'EURUSD'
     exchange: z.B. 'BINANCE', 'OANDA', 'FX_IDC'
     screener: 'crypto', 'forex', 'america', 'cfd', etc.
     """
+    tradingview_limiter.acquire()
     handler = TA_Handler(
         symbol=symbol,
         exchange=exchange,

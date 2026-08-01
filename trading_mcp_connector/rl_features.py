@@ -22,6 +22,7 @@ mindestens ~250 Kerzen Historie empfohlen (wegen sma_200 etc.).
 """
 
 from __future__ import annotations
+import hashlib
 import numpy as np
 import pandas as pd
 import ta
@@ -477,3 +478,78 @@ def build_feature_vector(df: pd.DataFrame, position_state: dict | None = None) -
     raw.update(_position_state_features(position_state))
 
     return {k: _safe(v) for k, v in raw.items()}
+
+
+# ---------------------------------------------------------------------------
+# Modell-taugliches Feature-Set (skaleninvariant)
+# ---------------------------------------------------------------------------
+# Absolute Preis-/Volumenniveaus (z.B. sma_20, pivot_point, vwap) tragen die
+# Groessenordnung des jeweiligen Instruments (Gold ~2300, ein Altcoin ~0.002).
+# Ein RL-Modell, das auf solchen Rohwerten trainiert, generalisiert nicht
+# zwischen Instrumenten/Zeitraeumen. Diese Keys sind deshalb im 'model'-Set
+# bewusst ausgeschlossen -- die dazugehoerigen *_pct-/Distanz-Varianten
+# bleiben erhalten und tragen dieselbe Information skaleninvariant.
+ABSOLUTE_PRICE_KEYS = {
+    # Trend/MA (Rohwerte -- price_vs_*_pct-Varianten bleiben im Modell-Set)
+    "sma_10", "sma_20", "sma_50", "sma_100", "sma_200",
+    "ema_9", "ema_21", "ema_50", "ema_200",
+    "macd", "macd_signal", "macd_diff", "macd_slope",
+    "ichimoku_a", "ichimoku_b", "psar",
+    # Momentum (preisskalierte Rohwerte)
+    "kama", "awesome_oscillator",
+    # Volatilitaet (Rohwerte -- *_pct-Varianten bleiben)
+    "atr_14", "true_range_last",
+    # Volumen (instrumentabhaengige Rohgroessen)
+    "obv", "obv_slope_5", "volume_sma_20", "vwap", "force_index_13",
+    # Breakout (Rohpreise -- distance_to_*_pct bleibt)
+    "donchian_high_20", "donchian_low_20", "donchian_high_50", "donchian_low_50",
+    "donchian_high_100", "donchian_low_100",
+    # Pivots (Rohpreise -- distance_to_*_pct bleibt)
+    "pivot_point", "resistance_1", "support_1", "resistance_2", "support_2",
+    # Fibonacci (Rohpreise -- distance_to_fib_*_pct bleibt)
+    "fib_0", "fib_236", "fib_382", "fib_5", "fib_618", "fib_786", "fib_100",
+    # Stop-Loss/Risiko (Rohpreise -- distance_to_*_pct bleibt)
+    "atr_stop_long", "atr_stop_short", "swing_low_stop", "swing_high_stop",
+    "risk_per_unit_atr", "suggested_risk_reward_2r_long", "suggested_risk_reward_2r_short",
+    "volatility_based_position_scale",
+}
+
+
+def build_model_feature_vector(df: pd.DataFrame, position_state: dict | None = None) -> dict:
+    """
+    Wie build_feature_vector(), aber gefiltert auf ein skaleninvariantes
+    Feature-Set: entfernt absolute Preis-/Volumenniveaus (ABSOLUTE_PRICE_KEYS)
+    sowie kategorische String-Werte (z.B. regime_regime_label -- die Information
+    steckt bereits in den One-Hot-Flags regime_direction_up etc.).
+
+    Das ist das Set, das tatsaechlich in den RL-Observation-Space gehoert.
+    build_feature_vector() bleibt fuer Menschen/Debugging/Dashboards nuetzlich,
+    wo absolute Preise Sinn ergeben.
+    """
+    full = build_feature_vector(df, position_state)
+    return {
+        k: v for k, v in full.items()
+        if k not in ABSOLUTE_PRICE_KEYS and not isinstance(v, str)
+    }
+
+
+# ---------------------------------------------------------------------------
+# Feature-Schema-Versionierung
+# ---------------------------------------------------------------------------
+# Bei jeder inhaltlichen Aenderung an den obigen _*_features()-Funktionen
+# (neues Feature, entferntes Feature, umbenannter Key) MUSS diese Version
+# erhoeht werden. Ein bereits trainiertes RL-Modell erwartet einen Vektor
+# fester Laenge/Reihenfolge -- ohne Versionsnummer merkt man eine
+# Schema-Aenderung erst an kryptischen Trainingsfehlern oder, schlimmer,
+# gar nicht (stilles Fehltraining mit vertauschten Feature-Spalten).
+FEATURE_SCHEMA_VERSION = "1.1.0"
+
+
+def feature_schema_hash(feature_dict: dict) -> str:
+    """Kurzer Hash ueber die sortierten Feature-Keys (nicht die Werte!).
+    Zwei Aufrufe mit demselben Hash garantieren: gleiche Keys, gleiche Reihenfolge
+    nach Sortierung -- ein RL-Modell kann sich also auf dieselbe Vektorform verlassen.
+    Aendert sich der Hash, hat sich das Schema geaendert -> Modell ggf. neu trainieren.
+    """
+    key_string = ",".join(sorted(feature_dict.keys()))
+    return hashlib.sha256(key_string.encode()).hexdigest()[:12]

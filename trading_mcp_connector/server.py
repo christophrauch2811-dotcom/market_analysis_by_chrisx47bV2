@@ -20,8 +20,11 @@ import pandas as pd
 
 from .sources import crypto_com, tradingview, mt5_source
 from .indicators import compute_all_indicators, fibonacci_retracement, latest_snapshot
-from .rl_features import build_feature_vector
+from .rl_features import build_feature_vector, build_model_feature_vector, FEATURE_SCHEMA_VERSION, feature_schema_hash
 from .regime import detect_regime
+from .data_quality import validate_ohlcv
+from .feature_selection import correlation_report, build_core_feature_vector, CORE_FEATURE_SET
+from .backtest import backtest_breakout_strategy
 
 mcp = FastMCP("trading-connector")
 
@@ -149,12 +152,21 @@ def market_regime(symbol: str, source: str = "crypto", timeframe: str = "1h", co
 
 @mcp.tool()
 def rl_feature_vector(symbol: str, source: str = "crypto", timeframe: str = "1h",
-                       count: int = 300, position_state: dict | None = None) -> dict:
-    """Baut einen 180+ Feature RL-State-Vektor (Trend, Momentum, Volatilitaet,
-    Volumen, Breakout, Pivots, Fibonacci, Candlestick-Patterns, Stop-Loss-
-    Distanzen, Session-/Zeit-Features, Statistik, optionaler Positions-State).
+                       count: int = 300, position_state: dict | None = None,
+                       mode: str = "model", expected_freq: str | None = None) -> dict:
+    """Baut den RL-State-Vektor (Trend, Momentum, Volatilitaet, Volumen,
+    Breakout, Pivots, Fibonacci, Candlestick-Patterns, Stop-Loss-Distanzen,
+    Session-/Zeit-Features, Statistik, Regime, optionaler Positions-State).
+
+    Prueft die Rohdaten vorher auf Qualitaetsprobleme (Luecken, Duplikate,
+    unplausible Spruenge) -- bei Problemen wird 'data_quality' im Ergebnis
+    gefuellt, die Berechnung laeuft trotzdem weiter (Warnung, kein Abbruch).
 
     source: 'crypto' (Crypto.com) oder 'mt5' (MetaTrader5, nur lokal/Windows)
+    mode: 'model' (Standard) liefert nur skaleninvariante Features -- das
+        gehoert in den RL-Observation-Space. 'raw' liefert zusaetzlich
+        absolute Preisniveaus (sma_20, pivot_point etc.) fuer Menschen/Debugging.
+    expected_freq: optionale pandas-Frequenz (z.B. '1h') fuer die Luecken-Pruefung.
     position_state: optionales dict mit side/entry_price/current_price/bars_held/
         stop_loss/take_profit/peak_equity/current_equity/consecutive_wins/losses
         -- falls der RL-Agent aktuell eine Position haelt.
@@ -164,12 +176,69 @@ def rl_feature_vector(symbol: str, source: str = "crypto", timeframe: str = "1h"
     else:
         df = crypto_com.get_candlestick(symbol, timeframe, count)
 
-    features = build_feature_vector(df, position_state)
+    quality = validate_ohlcv(df, expected_freq=expected_freq)
+
+    if mode == "raw":
+        features = build_feature_vector(df, position_state)
+    else:
+        features = build_model_feature_vector(df, position_state)
+
     return {
-        "symbol": symbol, "source": source, "timeframe": timeframe,
+        "symbol": symbol, "source": source, "timeframe": timeframe, "mode": mode,
         "feature_count": len(features), "features": features,
+        "schema_version": FEATURE_SCHEMA_VERSION, "schema_hash": feature_schema_hash(features),
+        "data_quality": quality,
         "disclaimer": DISCLAIMER,
     }
+
+
+@mcp.tool()
+def rl_core_feature_vector(symbol: str, source: str = "crypto", timeframe: str = "1h",
+                            count: int = 300, position_state: dict | None = None) -> dict:
+    """Wie rl_feature_vector (mode='model'), aber auf ein handkuratiertes
+    Core-Set von ~45 Features reduziert (weniger redundant, z.B. nur RSI-14
+    statt RSI-7/14/21). Sinnvoll als schlankerer Startpunkt fuer erstes Training.
+    """
+    if source == "mt5":
+        df = mt5_source.get_ohlcv(symbol, timeframe, count)
+    else:
+        df = crypto_com.get_candlestick(symbol, timeframe, count)
+    full = build_model_feature_vector(df, position_state)
+    core = build_core_feature_vector(full)
+    return {
+        "symbol": symbol, "source": source, "timeframe": timeframe,
+        "feature_count": len(core), "of_total_available": len(full), "features": core,
+        "schema_version": FEATURE_SCHEMA_VERSION, "disclaimer": DISCLAIMER,
+    }
+
+
+@mcp.tool()
+def check_data_quality(symbol: str, source: str = "crypto", timeframe: str = "1h",
+                        count: int = 300, expected_freq: str | None = None) -> dict:
+    """Prueft OHLCV-Rohdaten auf Luecken, Duplikate, OHLC-Inkonsistenzen und
+    unplausible Preisspruenge -- ohne Features zu berechnen. Sinnvoll als
+    eigenstaendiger Check vor einem RL-Trainingslauf ueber lange Historien.
+    """
+    if source == "mt5":
+        df = mt5_source.get_ohlcv(symbol, timeframe, count)
+    else:
+        df = crypto_com.get_candlestick(symbol, timeframe, count)
+    return validate_ohlcv(df, expected_freq=expected_freq)
+
+
+@mcp.tool()
+def backtest_breakout(symbol: str, source: str = "crypto", timeframe: str = "1h", count: int = 500) -> dict:
+    """Sanity-Check fuer die Donchian-Breakout-Logik: simuliert eine einfache
+    Long/Short/Flat-Strategie auf Basis von 20-Kerzen-Ausbruechen (vereinfachte
+    Simulation, keine Order-Ausfuehrung/Gebuehren-Realitaet -- nur Plausibilisierung).
+    """
+    if source == "mt5":
+        df = mt5_source.get_ohlcv(symbol, timeframe, count)
+    else:
+        df = crypto_com.get_candlestick(symbol, timeframe, count)
+    result = backtest_breakout_strategy(df)
+    result["disclaimer"] = DISCLAIMER
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +248,8 @@ def rl_feature_vector(symbol: str, source: str = "crypto", timeframe: str = "1h"
 @mcp.tool()
 def list_rl_feature_categories() -> dict:
     """Zeigt, wie viele Features rl_feature_vector je Kategorie liefert."""
-    import pandas as pd, numpy as np, rl_features as rf
+    import pandas as pd, numpy as np
+    from . import rl_features as rf
     n = 300
     idx = pd.date_range("2024-01-01", periods=n, freq="h")
     price = 100 + np.cumsum(np.random.randn(n))
@@ -201,7 +271,34 @@ def list_rl_feature_categories() -> dict:
         "regime_trend": rf._regime_features(df),
         "positions_state": rf._position_state_features(None),
     }
-    return {k: len(v) for k, v in categories.items()} | {"gesamt": sum(len(v) for v in categories.values())}
+    result = {k: len(v) for k, v in categories.items()}
+    result["gesamt_raw"] = sum(len(v) for v in categories.values())
+    result["gesamt_model"] = len(rf.build_model_feature_vector(df))
+    result["gesamt_core"] = len(CORE_FEATURE_SET)
+    return result
+
+
+@mcp.tool()
+def analyze_feature_correlation(symbol: str, source: str = "crypto", timeframe: str = "1h",
+                                 history_points: int = 200, threshold: float = 0.95) -> dict:
+    """Berechnet den Modell-Feature-Vektor an `history_points` aufeinanderfolgenden
+    Zeitpunkten und findet Feature-Paare, die staerker als `threshold` korrelieren
+    -- Basis fuer eine gezielte Reduktion des 210-Feature-Sets. Rechenintensiv
+    (ein Feature-Vektor pro Zeitpunkt), daher Default bewusst klein gehalten.
+    """
+    if source == "mt5":
+        df = mt5_source.get_ohlcv(symbol, timeframe, 210 + history_points)
+    else:
+        df = crypto_com.get_candlestick(symbol, timeframe, 210 + history_points)
+
+    rows = []
+    for i in range(210, len(df)):
+        window = df.iloc[max(0, i - 210):i + 1]
+        rows.append(build_model_feature_vector(window))
+    history_df = pd.DataFrame(rows, index=df.index[210:])
+    report = correlation_report(history_df, threshold=threshold)
+    report["disclaimer"] = DISCLAIMER
+    return report
 
 
 @mcp.tool()

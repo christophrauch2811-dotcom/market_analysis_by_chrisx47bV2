@@ -1,15 +1,16 @@
 """
-CSV-Export fuer OHLCV-DataFrames.
+Export-Utilities: CSV fuer OHLCV-DataFrames, generischer Text-Export (z.B.
+fuer generierten Pine-Script-Code).
 
-Bewusst als generische Utility gebaut (nicht MT5-spezifisch), auch wenn der
-erste Anwendungsfall MT5-Historie ist -- funktioniert mit jedem DataFrame
-aus indicators.py/rl_features.py/mt5_source.py etc.
+Bewusst generisch gebaut -- export_ohlcv_csv funktioniert mit jedem
+DataFrame aus indicators.py/rl_features.py/mt5_source.py etc.,
+export_text_file mit jedem String-Inhalt (Pine Script, Reports, Logs).
 
-WICHTIG zum Speicherort: Da MT5 nur lokal auf deinem Windows-Rechner laeuft
-(dort, wo dieser MCP-Server gestartet wird), landet die CSV-Datei direkt auf
-deiner Festplatte -- es gibt keinen Upload/Download-Schritt wie in einer
-Cloud-Sandbox. Ohne eigenen `filepath` wird die Datei im aktuellen
-Arbeitsverzeichnis des Server-Prozesses abgelegt.
+WICHTIG zum Speicherort: Dieser MCP-Server laeuft lokal auf deinem Rechner
+(bei MT5 sogar zwingend). Jede Datei landet direkt auf deiner Festplatte --
+es gibt keinen Upload/Download-Schritt wie in einer Cloud-Sandbox. Ohne
+eigenen `filepath` wird automatisch ein Dateiname im aktuellen
+Arbeitsverzeichnis des Server-Prozesses erzeugt.
 """
 
 from __future__ import annotations
@@ -44,5 +45,33 @@ def export_ohlcv_csv(df: pd.DataFrame, filepath: str | None = None,
         "row_count": len(df),
         "columns": list(df.columns),
         "date_range": (str(df.index.min()), str(df.index.max())) if isinstance(df.index, pd.DatetimeIndex) else None,
+        "file_size_kb": round(os.path.getsize(filepath) / 1024, 1),
+    }
+
+
+def export_text_file(content: str, filepath: str | None = None,
+                      base_name: str | None = None, extension: str = "txt") -> dict:
+    """Schreibt beliebigen Textinhalt (z.B. generierten Pine-Script-Code) in
+    eine Datei. Ohne `filepath` wird automatisch ein Dateiname aus
+    `base_name`/Zeitstempel gebaut. Gibt Metadaten zurueck (Pfad, Zeilenzahl,
+    Groesse), NICHT nochmal den Inhalt -- der steht ja schon in der Antwort.
+    """
+    if not content:
+        raise ValueError("content ist leer -- nichts zu exportieren.")
+
+    if filepath is None:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        name_parts = [p for p in (base_name, ts) if p]
+        filename = "_".join(str(p) for p in name_parts) + f".{extension}"
+        filepath = os.path.join(os.getcwd(), filename)
+
+    filepath = os.path.abspath(filepath)
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    return {
+        "filepath": filepath,
+        "line_count": len(content.splitlines()),
         "file_size_kb": round(os.path.getsize(filepath) / 1024, 1),
     }

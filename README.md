@@ -223,8 +223,20 @@ Pine-Script-Compiler in dieser Umgebung. Die Syntax folgt den verifizierten
 v6-Konventionen und wurde strukturell geprüft (Klammern-Balance, korrekte
 Variablennamen bei Mehrfach-Komponenten, alle 10 Indikator-Bausteine und
 alle 32 Entry/Exit/Richtungs-Kombinationen der Strategie durchgetestet) --
-das ist aber kein Ersatz für eine echte Compilierung. **Bitte jeden
-generierten Code im TradingView Pine-Editor prüfen, bevor du ihn nutzt.**
+das ist aber kein Ersatz für eine echte Compilierung.
+
+✅ **Live verifiziert**: sowohl ein generierter Indikator als auch eine
+generierte Strategie liefen erfolgreich im echten TradingView Pine-Editor
+(Bestätigung erhalten). Trotzdem gilt weiterhin: bei neuen Kombinationen
+(andere Bausteine, andere Entry/Exit-Methoden) im Zweifel im Pine-Editor prüfen.
+
+**Datei-Export**: `create_pinescript_indicator`/`create_pinescript_strategy`
+speichern den Code standardmäßig (`save_to_file=True`) zusätzlich als
+`.txt`-Datei lokal auf der Festplatte (dieser Server läuft auf deinem
+Rechner -- kein Upload/Download-Umweg). Ohne eigenen `output_path` wird
+automatisch ein Dateiname aus Name/Zeitstempel im aktuellen
+Arbeitsverzeichnis erzeugt; der zurückgegebene Datei-Inhalt ist byte-genau
+identisch mit dem `pine_script`-Feld der Antwort (getestet).
 
 ### Monitoring & Alerting (`monitoring.py`)
 

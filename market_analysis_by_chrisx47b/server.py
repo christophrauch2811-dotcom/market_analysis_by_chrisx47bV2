@@ -34,7 +34,7 @@ from .monitoring import alert_manager, health_monitor, alert_on_data_quality
 from .news_filter import get_filtered_news, DEFAULT_FEEDS
 from .chart_patterns import detect_chart_patterns
 from . import stop_management
-from .export import export_ohlcv_csv
+from .export import export_ohlcv_csv, export_text_file
 
 mcp = FastMCP("market-analysis-by-chrisx47b")
 
@@ -169,7 +169,8 @@ def tradingview_summary(symbol: str, exchange: str, screener: str, interval: str
 
 
 @mcp.tool()
-def create_pinescript_indicator(name: str, components: list[str], overlay: bool = False) -> dict:
+def create_pinescript_indicator(name: str, components: list[str], overlay: bool = False,
+                                 save_to_file: bool = True, output_path: str | None = None) -> dict:
     """Erstellt ein Pine-Script-v6-Indikator-Skript zum Einfuegen in TradingViews
     Pine-Editor. components kombiniert beliebig viele der folgenden Bausteine
     (auch mehrfach, z.B. ['ema','ema'] fuer zwei EMAs mit unterschiedlicher Laenge):
@@ -179,21 +180,32 @@ def create_pinescript_indicator(name: str, components: list[str], overlay: bool 
     (Standard) gibt Oszillatoren ein eigenes Panel und zeigt MA/Bollinger/
     Supertrend/VWAP trotzdem via force_overlay auf dem Chart.
 
+    save_to_file: Standardmaessig True -- speichert den Code zusaetzlich als
+    .txt-Datei lokal (dieser Server laeuft auf deinem Rechner, die Datei
+    landet direkt auf deiner Festplatte, kein Upload/Download-Umweg). Ohne
+    eigenen output_path wird automatisch ein Dateiname aus Name/Zeitstempel
+    im aktuellen Arbeitsverzeichnis erzeugt.
+
     WICHTIG: Der Code wurde NICHT compiliert (kein Pine-Compiler verfuegbar) --
     bitte im TradingView Pine-Editor pruefen, bevor du ihn nutzt.
     """
     code = pine_generator.generate_pine_indicator(name, components, overlay=overlay)
-    return {
+    result = {
         "name": name, "components": components, "pine_script": code,
         "warning": "Nicht compiliert -- bitte im TradingView Pine-Editor verifizieren.",
     }
+    if save_to_file:
+        file_info = export_text_file(code, filepath=output_path, base_name=name.replace(" ", "_"), extension="txt")
+        result["file"] = file_info
+    return result
 
 
 @mcp.tool()
 def create_pinescript_strategy(name: str, entry_method: str = "ema_cross", direction: str = "both",
                                 exit_method: str = "percent", stop_loss_pct: float = 2.0,
                                 take_profit_pct: float = 4.0, atr_stop_mult: float = 2.0,
-                                atr_take_profit_mult: float = 4.0, atr_length: int = 14) -> dict:
+                                atr_take_profit_mult: float = 4.0, atr_length: int = 14,
+                                save_to_file: bool = True, output_path: str | None = None) -> dict:
     """Erstellt ein Pine-Script-v6-Strategie-Skript (strategy.entry/strategy.exit)
     zum Einfuegen in TradingViews Pine-Editor -- lauffaehig in TradingViews
     eigenem Strategy Tester. Dieser Connector backtestet bewusst nicht selbst
@@ -204,6 +216,9 @@ def create_pinescript_strategy(name: str, entry_method: str = "ema_cross", direc
     direction: 'long_only', 'short_only', 'both'
     exit_method: 'percent' (stop_loss_pct/take_profit_pct) oder 'atr' (atr_stop_mult/atr_take_profit_mult)
 
+    save_to_file: Standardmaessig True -- speichert den Code zusaetzlich als
+    .txt-Datei lokal auf deiner Festplatte (siehe create_pinescript_indicator).
+
     WICHTIG: Der Code wurde NICHT compiliert (kein Pine-Compiler verfuegbar) --
     bitte im TradingView Pine-Editor pruefen/backtesten, bevor du ihn nutzt.
     """
@@ -212,11 +227,15 @@ def create_pinescript_strategy(name: str, entry_method: str = "ema_cross", direc
         stop_loss_pct=stop_loss_pct, take_profit_pct=take_profit_pct,
         atr_stop_mult=atr_stop_mult, atr_take_profit_mult=atr_take_profit_mult, atr_length=atr_length,
     )
-    return {
+    result = {
         "name": name, "entry_method": entry_method, "direction": direction,
         "exit_method": exit_method, "pine_script": code,
         "warning": "Nicht compiliert -- bitte im TradingView Pine-Editor verifizieren/backtesten.",
     }
+    if save_to_file:
+        file_info = export_text_file(code, filepath=output_path, base_name=name.replace(" ", "_"), extension="txt")
+        result["file"] = file_info
+    return result
 
 
 # ---------------------------------------------------------------------------
